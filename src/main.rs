@@ -46,6 +46,10 @@ async fn main() -> Result<()> {
         }
     }
 
+    if !args.skip_playlists.is_empty() {
+        info!("skipping playlists: {:?}", args.skip_playlists);
+    }
+
     let src_api = args.src.parse(&args, &config_dir).await?;
     match args.src.get_dst() {
         MusicPlatformDst::Export { dest, minify } => {
@@ -53,7 +57,7 @@ async fn main() -> Result<()> {
         }
         _ => {
             let dst_api = args.src.get_dst().parse(&args, &config_dir).await?;
-            synchronize(src_api, dst_api, args.config).await?;
+            synchronize(src_api, dst_api, args.config, args.skip_playlists, args.src.get_owner().to_string(), args.src.get_dst().get_owner().to_string()).await?;
         }
     }
 

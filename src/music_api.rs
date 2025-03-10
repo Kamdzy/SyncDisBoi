@@ -76,6 +76,7 @@ pub struct Playlist {
     pub id: String,
     pub name: String,
     pub songs: Vec<Song>,
+    pub owner: Option<String>,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
@@ -139,8 +140,8 @@ impl Song {
         let dur1 = self.duration_ms / 1000;
         let dur2 = other.duration_ms / 1000;
 
-        // we allow a 1 second difference
-        if !(dur1 - 1..=dur1 + 1).contains(&dur2) {
+        // we allow a 5 second difference
+        if !(dur1 - 5..=dur1 + 5).contains(&dur2) {
             debug!("Duration: {} vs {} --> {} VS {}", dur1, dur2, self, other);
             return false;
         }

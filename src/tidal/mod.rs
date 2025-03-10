@@ -247,6 +247,7 @@ impl MusicApi for TidalApi {
             id: res.data.uuid,
             name: name.to_string(),
             songs: vec![],
+            owner: Some("".to_string()) // TODO: get the owner
         })
     }
 

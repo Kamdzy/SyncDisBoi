@@ -53,6 +53,12 @@ pub struct SpotifyPlaylistResponse {
     pub name: String,
     #[allow(dead_code)]
     pub public: bool,
+    pub owner: Owner
+}
+
+#[derive(Deserialize, Debug)]
+pub struct Owner {
+    pub id: String
 }
 
 #[derive(Deserialize, Debug)]

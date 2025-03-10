@@ -26,6 +26,9 @@ pub async fn synchronize(
     src_api: DynMusicApi,
     dst_api: DynMusicApi,
     config: ConfigArgs,
+    skip_playlists: Vec<String>,
+    src_owner: String,
+    dst_owner: String,
 ) -> Result<()> {
     if !config.diff_country
         && src_api.api_type() != MusicApiType::YtMusic
@@ -42,7 +45,7 @@ pub async fn synchronize(
     }
 
     info!("retrieving playlists...");
-    let src_playlists = src_api.get_playlists_full().await?;
+    let mut src_playlists = src_api.get_playlists_full().await?;
     let mut dst_playlists = dst_api.get_playlists_full().await?;
     let dst_likes = dst_api.get_likes().await?;
 
@@ -50,6 +53,40 @@ pub async fn synchronize(
     let mut all_new_songs = json!({});
     let mut no_albums = json!({});
     let mut stats = json!({});
+
+
+    /* Filter to specific playlists */
+    // Filter by playlist name
+    // playlists.retain(|playlist| playlist.name == "sh22");
+
+    // Filter by playlist owner if we want to sync only our own playlists
+    // src_playlists.retain(|playlist| playlist.owner == Some(src_owner.to_string()));
+
+    // Remove skipped playlists by matching name lowercase
+    src_playlists.retain(|playlist| {
+        !skip_playlists
+            .iter()
+            .any(|skipped| playlist.name.to_lowercase() == skipped.to_lowercase())
+    });
+
+    // Remove destinaton playlists that are not owned by our user
+    dst_playlists.retain(|playlist| {
+        if playlist.owner != Some(dst_owner.clone()) {
+            warn!(
+                "destination playlist \"{}\" is not owned by user \"{}\", skipping",
+                playlist.name, dst_owner
+            );
+
+            // Remove matching playlist from source playlists
+            if let Some(i) = src_playlists.iter().position(|p| p.name == playlist.name) {
+                src_playlists.remove(i);
+            }
+            
+            false
+        } else {
+            true
+        }
+    });
 
     for mut src_playlist in src_playlists
         .into_iter()
@@ -90,19 +127,20 @@ pub async fn synchronize(
                 continue;
             }
             // no album metadata == youtube video
-            if src_song.album.is_none() {
-                warn!(
-                    "No album metadata for source song \"{}\", skipping",
-                    src_song
-                );
-                if config.debug {
-                    no_albums_songs
-                        .as_array_mut()
-                        .unwrap()
-                        .push(json!(src_song));
-                }
-                continue;
-            }
+            /* Commented this part out, personal preference */
+            // if src_song.album.is_none() {
+            //     warn!(
+            //         "No album metadata for source song \"{}\", skipping",
+            //         src_song
+            //     );
+            //     if config.debug {
+            //         no_albums_songs
+            //             .as_array_mut()
+            //             .unwrap()
+            //             .push(json!(src_song));
+            //     }
+            //     continue;
+            // }
 
             attempts += 1;
 

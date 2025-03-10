@@ -17,6 +17,10 @@ pub struct RootArgs {
     /// Logging level
     #[arg(short, long, value_enum, default_value_t = LoggingLevel::Info)]
     pub logging: LoggingLevel,
+
+    /// List of playlist names to skip, separated by '|'
+    #[arg(long, use_value_delimiter = true, value_delimiter = '|')]
+    pub skip_playlists: Vec<String>,
 }
 
 #[derive(Subcommand, Clone, Debug)]
@@ -50,6 +54,9 @@ pub enum MusicPlatformSrc {
         /// Clear the cached ytmusic_oauth.json file
         #[arg(long, requires = "client_id", requires = "client_secret")]
         clear_cache: bool,
+        /// The owner of the playlists, this is required to know which playlists to skip
+        #[arg(long)]
+        owner: String,
         /// The destination music platform
         #[command(subcommand)]
         dst: MusicPlatformDst,
@@ -64,6 +71,9 @@ pub enum MusicPlatformSrc {
         /// Clear the cached spotify_oauth.json file
         #[arg(long)]
         clear_cache: bool,
+        /// The owner of the playlists, this is required to know which playlists to skip
+        #[arg(long)]
+        owner: String,
         /// The destination music platform
         #[command(subcommand)]
         dst: MusicPlatformDst,
@@ -82,6 +92,9 @@ pub enum MusicPlatformSrc {
         /// Clear the cached tidal_oauth.json file
         #[arg(long)]
         clear_cache: bool,
+        /// The owner of the playlists, this is required to know which playlists to skip
+        #[arg(long)]
+        owner: String,
         /// The destination music platform
         #[command(subcommand)]
         dst: MusicPlatformDst,
@@ -121,6 +134,9 @@ pub enum MusicPlatformDst {
         /// Clear the cached ytmusic_oauth.json file
         #[arg(long, requires = "client_id", requires = "client_secret")]
         clear_cache: bool,
+        /// The owner of the playlists, this is required to know which playlists to skip
+        #[arg(long)]
+        owner: String,
     },
     Spotify {
         /// The client ID for the Spotify API application
@@ -132,6 +148,9 @@ pub enum MusicPlatformDst {
         /// Clear the cached spotify_oauth.json file
         #[arg(long)]
         clear_cache: bool,
+        /// The owner of the playlists, this is required to know which playlists to skip
+        #[arg(long)]
+        owner: String,
     },
     Tidal {
         /// The client ID for the Tidal API application
@@ -147,6 +166,9 @@ pub enum MusicPlatformDst {
         /// Clear the cached tidal_oauth.json file
         #[arg(long)]
         clear_cache: bool,
+        /// The owner of the playlists, this is required to know which playlists to skip
+        #[arg(long)]
+        owner: String,
     },
     Export {
         /// The path to the file to export the playlists to

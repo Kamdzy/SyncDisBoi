@@ -16,18 +16,36 @@ pub struct YtMusicResponse {
 impl YtMusicResponse {
     pub fn merge(&mut self, other: &mut YtMusicContinuationResponse) -> Option<()> {
         if let Some(gr) = self.get_grid_renderer() {
-            gr.items.append(
-                &mut other
+            if let Some(gr_items) = gr.items.as_mut() {
+                if let Some(other_items) = other
                     .continuation_contents
+                    .as_mut()?
                     .grid_continuation
                     .as_mut()?
-                    .items,
-            );
+                    .items
+                    .as_mut()
+                {
+                    gr_items.append(other_items);
+                }
+            }
             Some(())
         } else if let Some(mpsr) = self.get_music_playlist_shelf_renderer() {
+
+            /* New method to handle continuation (pagination) response */
+            if let Some(response_actions) = other.on_response_received_actions.as_mut() {
+                for action in response_actions {
+                    if let Some(append_action) = action.append_continuation_items_action.as_mut() {
+                        if let Some(continuation_items) = append_action.continuation_items.as_mut() {
+                            mpsr.contents.as_mut()?.append(continuation_items);
+                        }
+                    }
+                }
+            }
+
             mpsr.contents.as_mut()?.append(
                 other
                     .continuation_contents
+                    .as_mut()?
                     .music_playlist_shelf_continuation
                     .as_mut()?
                     .contents
@@ -72,6 +90,7 @@ impl YtMusicResponse {
         Some(
             self.get_grid_renderer()?
                 .items
+                .as_mut()?
                 .iter()
                 .map(|item2| &item2.music_two_row_item_renderer)
                 .collect(),
@@ -109,6 +128,7 @@ impl YtMusicResponse {
         } else if let Some(tr) = self.contents.two_column_browse_results_renderer.as_mut() {
             tr.secondary_contents
                 .section_list_renderer
+                .as_mut()?
                 .contents
                 .as_mut()?
                 .iter_mut()
@@ -130,16 +150,63 @@ impl YtMusicResponse {
             .as_mut()
     }
 
+    /* Currently unused */
+    /*pub fn get_section_list_renderer(&mut self) -> Option<&mut SectionListRenderer> {
+        self.contents.two_column_browse_results_renderer.as_mut()?
+            .secondary_contents
+            .section_list_renderer
+            .as_mut()
+    }*/
+
+    /* This was changed to iterate all renderers until one is found with continuation */
     pub fn get_continuation(&mut self) -> Option<String> {
+        let mut continuation = None;
+
         if let Some(gr) = self.get_grid_renderer() {
-            Some(gr.continuations.as_ref()?[0].get_continuation())
-        } else if let Some(mpsr) = self.get_music_playlist_shelf_renderer() {
-            Some(mpsr.continuations.as_ref()?[0].get_continuation())
-        } else {
-            None
+            continuation = gr.continuations.as_ref().and_then(|c| c.get(0)).map(|c| c.get_continuation());
         }
+
+        if continuation.is_none() {
+
+            /* This code populates the original playlist response */
+            if let Some(mpsr) = self.get_music_playlist_shelf_renderer() {
+                if let Some(contents) = &mpsr.contents {
+                    for content in contents {
+                        if let Some(continuation_item_renderer) = &content.continuation_item_renderer {
+                            continuation = Some(continuation_item_renderer.continuation_endpoint.get_continuation());
+                            break;
+                        }
+                    }
+                }
+
+                if continuation.is_none() {
+                    continuation = mpsr.continuations.as_ref().and_then(|c| c.get(0)).map(|c| c.get_continuation());
+                }
+            }
+        }
+
+        /* Not necessary for getting more than 100 songs */
+        // if continuation.is_none() {
+        //     if let Some(slr) = self.get_section_list_renderer() {
+        //         continuation = slr.continuations.as_ref().and_then(|c| c.get(0)).map(|c| c.get_continuation());
+        //     }
+        // }
+
+        continuation
     }
 }
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct ResponseReceivedAction {
+    pub append_continuation_items_action: Option<AppendContinuationItemsAction>,
+}
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct AppendContinuationItemsAction {
+pub continuation_items: Option<Vec<MusicPlaylistShelfRendererContent>>,
+}
+
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct ContentsVec<T> {
@@ -167,7 +234,20 @@ pub struct ResponseContent {
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct TwoColumnBrowseResultsRenderer {
-    pub secondary_contents: TabRendererContent,
+    pub tab_renderer: Option<TabRendererContent>,
+    pub secondary_contents: SecondaryContents,
+}
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct SecondaryContents {
+    pub section_list_renderer: Option<SectionListRenderer>,
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct SectionListRenderer {
+    pub contents: Option<Vec<SectionRendererContent>>,
+    pub continuations: Option<[Continuation; 1]>,
 }
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -209,13 +289,37 @@ impl MusicPlaylistShelfRenderer {
 #[serde(rename_all = "camelCase")]
 pub struct MusicPlaylistShelfRendererContent {
     pub music_responsive_list_item_renderer: Option<MusicResponsiveListItemRenderer>,
+    pub continuation_item_renderer: Option<ContinuationItemRenderer>,
 }
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct ContinuationItemRenderer {
+    pub continuation_endpoint: ContinuationEndpoint,
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct ContinuationEndpoint {
+    pub continuation_command: ContinuationCommand,
+}
+impl ContinuationEndpoint {
+    pub fn get_continuation(&self) -> String {
+        self.continuation_command.token.clone()
+    }
+}
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct ContinuationCommand {
+    pub token: String,
+}
+
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct MusicResponsiveListItemRenderer {
     pub menu: Option<Menu>,
     pub overlay: Option<Overlay>,
-    pub flex_columns: Vec<FlexColumn>,
+    pub flex_columns: Option<Vec<FlexColumn>>,
     pub fixed_columns: Option<Vec<FixedColumn>>,
     pub playlist_item_data: Option<PlaylistItemData>,
 }
@@ -243,6 +347,7 @@ impl MusicResponsiveListItemRenderer {
         let mrlifcr = if flex {
             &self
                 .flex_columns
+                .as_ref()?
                 .get(idx)?
                 .music_responsive_list_item_flex_column_renderer
         } else {
@@ -285,7 +390,7 @@ pub struct ItemSectionRendererContent {
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct GridRenderer {
-    pub items: Vec<Item2>,
+    pub items: Option<Vec<Item2>>,
     pub continuations: Option<[Continuation; 1]>,
 }
 impl GridRenderer {
@@ -311,8 +416,12 @@ impl MusicTwoRowItemRenderer {
         self.title.runs.as_ref()?.first()?.get_id()
     }
 
-    pub fn get_name(&self) -> Option<String> {
+    pub fn  get_name(&self) -> Option<String> {
         Some(self.title.runs.as_ref()?.first()?.get_text())
+    }
+
+    pub fn get_owner(&self) -> Option<String> {
+        Some(self.subtitle.as_ref()?.runs.as_ref()?.first()?.get_text())
     }
 }
 #[derive(Deserialize, Debug)]
@@ -418,11 +527,67 @@ pub struct PlaylistEditEndpoint {
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct Action {
-    pub action: String,
-    pub removed_video_id: String,
-    pub set_video_id: String,
+    pub action: Option<String>,
+    pub removed_video_id: Option<String>,
+    pub set_video_id: Option<String>,
+    pub confirm_dialog_endpoint: Option<ConfirmDialogEndpoint>,
+    pub add_to_toast_action: Option<AddToToastAction>,
 }
 
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct ConfirmDialogEndpoint {
+    pub content: ConfirmDialogContent,
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct ConfirmDialogContent {
+    pub confirm_dialog_renderer: ConfirmDialogRenderer,
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct ConfirmDialogRenderer {
+    pub title: Title,
+    pub dialog_messages: Vec<DialogMessage>,
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct Title {
+    pub runs: Vec<Run>,
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct DialogMessage {
+    pub runs: Vec<Run>,
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct AddToToastAction {
+    pub item: AddToToastActionItem,
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct AddToToastActionItem {
+    pub notification_action_renderer: NotificationActionRenderer,
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct NotificationActionRenderer {
+    pub response_text: ResponseText,
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct ResponseText {
+    pub runs: Vec<Run>,
+}
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct Overlay {
@@ -455,14 +620,36 @@ pub struct PlaylistItemData {
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct YtMusicContinuationResponse {
-    pub continuation_contents: ContinuationContents,
+    pub continuation_contents: Option<ContinuationContents>,
+    pub on_response_received_actions: Option<Vec<ResponseReceivedAction>>,
 }
 impl YtMusicContinuationResponse {
     pub fn get_continuation(&self) -> Option<String> {
-        if let Some(g) = &self.continuation_contents.grid_continuation {
-            g.get_continuation()
-        } else if let Some(m) = &self.continuation_contents.music_playlist_shelf_continuation {
-            m.get_continuation()
+        /* This new code finds the actual continuation token for playlist songs pagination */
+        if let Some(orra) = &self.on_response_received_actions {
+            for content in orra {
+                if let Some(acia) = &content.append_continuation_items_action {
+                    if let Some(continuation_item) = &acia.continuation_items {
+                        for item in continuation_item {
+                            if let Some(ce) = &item.continuation_item_renderer {
+                                return Some(ce.continuation_endpoint.get_continuation());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if let Some(cc) = &self.continuation_contents {
+            if let Some(g) = &cc.grid_continuation {
+                g.get_continuation()
+            } else if let Some(m) = &cc.music_playlist_shelf_continuation {
+                m.get_continuation()
+            } else if let Some(s) = &cc.section_list_continuation {
+                s.get_continuation()
+            } else {
+                None
+            }
         } else {
             None
         }
@@ -473,6 +660,19 @@ impl YtMusicContinuationResponse {
 pub struct ContinuationContents {
     pub grid_continuation: Option<GridRenderer>,
     pub music_playlist_shelf_continuation: Option<MusicPlaylistShelfRenderer>,
+    pub section_list_continuation: Option<SectionListContinuation>,
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct SectionListContinuation {
+    pub contents: Option<Vec<MusicPlaylistShelfRendererContent>>,
+    pub continuations: Option<[Continuation; 1]>,
+}
+impl SectionListContinuation {
+    pub fn get_continuation(&self) -> Option<String> {
+        Some(self.continuations.as_ref()?[0].get_continuation())
+    }
 }
 
 // Responses
@@ -510,6 +710,7 @@ pub struct YtMusicPlaylistCreateResponse {
 #[serde(rename_all = "camelCase")]
 pub struct YtMusicPlaylistEditResponse {
     pub status: String,
+    pub actions: Option<Vec<Action>>,
 }
 impl YtMusicPlaylistEditResponse {
     pub fn success(&self) -> bool {

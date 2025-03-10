@@ -1,7 +1,7 @@
 use color_eyre::eyre::{eyre, Error, Result};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use tracing::debug;
+use tracing::{debug, info};
 
 use super::model::YtMusicResponse;
 use super::YtMusicApi;
@@ -42,10 +42,16 @@ impl TryInto<Playlists> for YtMusicResponse {
                 .ok_or(eyre!("No playlist name"))?
                 .trim()
                 .to_string();
+            let owner = mtrir
+                .get_owner()
+                .ok_or(eyre!("No playlist owner name"))?
+                .trim()
+                .to_string();
             let playlist = Playlist {
                 id,
                 name,
                 songs: vec![],
+                owner: Some(owner)
             };
             playlists.push(playlist);
         }
@@ -75,10 +81,70 @@ impl TryInto<Songs> for YtMusicResponse {
             let id = mrlir.get_id().ok_or(eyre!("No song id"))?;
             let set_id = mrlir.get_set_id().ok_or(eyre!("No song set_id"))?;
 
-            let duration_str = mrlir
-                .get_col_run_text(0, 0, false)
-                .ok_or(eyre!("No duration"))?;
+            let duration_str = {
+                // Check both fixed_columns and flex_columns for the duration
+                let fixed_cols = mrlir.fixed_columns.as_ref();
+                let flex_cols = mrlir.flex_columns.as_ref();
+
+                if let Some(fixed_cols) = fixed_cols {
+                    // debug!("Found {} fixed_columns", fixed_cols.len());
+                    // Get the first fixed column
+                    let fixed_col = fixed_cols.get(0)
+                        .ok_or(eyre!("No fixed column at index 0"))?;
+                    // debug!("Fixed column 0: {:?}", fixed_col);
+                    
+                    // Access the renderer text
+                    let text = &fixed_col.music_responsive_list_item_fixed_column_renderer.text;
+                    // debug!("Fixed column text field: {:?}", text);
+                    
+                    // Get the runs array
+                    let runs = text.runs.as_ref()
+                        .ok_or(eyre!("No runs found in fixed column text"))?;
+                    // debug!("Runs in fixed column: {:?}", runs);
+                    
+                    // Get the first run and extract its text
+                    let first_run = runs.first()
+                        .ok_or(eyre!("No first run in fixed column text"))?;
+                    // debug!("First run: {:?}", first_run);
+                    
+                    first_run.text.clone()
+                } else if let Some(flex_cols) = flex_cols {
+                    // debug!("Found {} flex_columns", flex_cols.len());
+                    // Get the third flex column (assuming duration is in the third column)
+                    let flex_col = flex_cols.get(2)
+                        .ok_or(eyre!("No flex column at index 2"))?;
+                    // debug!("Flex column 2: {:?}", flex_col);
+                    
+                    // Access the renderer text
+                    let text = &flex_col.music_responsive_list_item_flex_column_renderer.text;
+                    // debug!("Flex column text field: {:?}", text);
+                    
+                    // Get the runs array
+                    let runs = text.runs.as_ref()
+                        .ok_or(eyre!("No runs found in flex column text"))?;
+                    // debug!("Runs in flex column: {:?}", runs);
+                    
+                    // Get the first run and extract its text
+                    let first_run = runs.first()
+                        .ok_or(eyre!("No first run in flex column text"))?;
+                    // debug!("First run: {:?}", first_run);
+                    
+                    first_run.text.clone()
+                } else {
+                    return Err(eyre!("No fixed_columns or flex_columns in item {:?}", mrlir));
+                }
+            };
+
+            if duration_str.is_empty() {
+                info!("Full item data: {:?}", mrlir);
+                info!("Flex columns: {:?}", mrlir.flex_columns);
+                info!("Fixed columns: {:?}", mrlir.fixed_columns);
+                return Err(eyre!("Failed to extract duration from fixed_columns"));
+                // Crash the program if the duration is not found
+            };
+            
             let duration = parse_duration(&duration_str)?;
+            debug!("Parsed duration (ms): {}", duration);
 
             // fc0 = song title
             // fc1 = artists

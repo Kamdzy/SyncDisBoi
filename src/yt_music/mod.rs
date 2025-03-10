@@ -6,6 +6,8 @@ use std::fmt::Write;
 use std::io::Read;
 use std::path::PathBuf;
 use std::sync::LazyLock;
+use std::thread::sleep;
+use std::time::Duration;
 
 use async_trait::async_trait;
 use color_eyre::eyre::{eyre, Result};
@@ -13,7 +15,7 @@ use model::{YtMusicAddLikeResponse, YtMusicOAuthDeviceRes};
 use reqwest::header::{HeaderMap, HeaderName};
 use serde::de::DeserializeOwned;
 use serde_json::json;
-use tracing::info;
+use tracing::{debug, info};
 
 use self::model::{YtMusicContinuationResponse, YtMusicPlaylistEditResponse, YtMusicResponse};
 use crate::music_api::{
@@ -222,8 +224,8 @@ impl YtMusicApi {
         while let Some(cont) = continuation {
             let mut response2: YtMusicContinuationResponse =
                 self.make_request(path, body, Some(&cont)).await?;
-            response.merge(&mut response2);
             continuation = response2.get_continuation();
+            response.merge(&mut response2);
         }
         Ok(response)
     }
@@ -239,6 +241,10 @@ impl YtMusicApi {
     {
         let body = self.add_context(body);
         let endpoint = self.build_endpoint(path, ctoken);
+
+        /* Switch to info for dev env */
+        debug!("Requesting: {}", endpoint);
+
         let res = self.client.post(&endpoint).json(&body).send().await?;
         let obj = if self.config.debug {
             let status = res.status();
@@ -291,6 +297,7 @@ impl MusicApi for YtMusicApi {
             id,
             name: name.to_string(),
             songs: vec![],
+            owner: Some("".to_string()) // TODO: get the owner
         })
     }
 
@@ -308,6 +315,9 @@ impl MusicApi for YtMusicApi {
         } else {
             format!("VL{}", id)
         };
+        
+        info!("Getting playlist songs for: {}", browse_id);
+
         let body = json!({ "browseId": browse_id });
         let response = self.paginated_request("browse", &body).await?;
         let songs: Songs = response.try_into()?;
@@ -324,6 +334,7 @@ impl MusicApi for YtMusicApi {
             let action = json!({
                 "action": "ACTION_ADD_VIDEO",
                 "addedVideoId": song.id,
+                "dedupeOption": "DEDUPE_OPTION_CHECK", // Allow youtube to check for duplicates
             });
             actions.push(action);
         }
@@ -335,7 +346,57 @@ impl MusicApi for YtMusicApi {
             .make_request("browse/edit_playlist", &body, None)
             .await?;
         if !response.success() {
-            return Err(eyre!("Error adding song to playlist"));
+            
+            if let Some(actions) = response.actions {
+                for action in actions {
+
+                    // Youtube Music sometimes returns a confirm dialog when adding duplicates
+                    // This is a workaround to handle that by splitting the list and retrying
+                    if let Some(confirm_dialog) = action.confirm_dialog_endpoint {
+                        let title_contains_duplicates = confirm_dialog
+                            .content
+                            .confirm_dialog_renderer
+                            .title
+                            .runs
+                            .iter()
+                            .any(|run| run.text == "Duplicates");
+    
+                        if title_contains_duplicates {
+                            // Handle duplicates by splitting the list and retrying
+                            if songs.len() > 1 {
+                                let mid = songs.len() / 2;
+                                self.add_songs_to_playlist(playlist, &songs[..mid]).await?;
+                                // Add a delay before the next recursive call
+                                sleep(Duration::from_secs(3));
+                                self.add_songs_to_playlist(playlist, &songs[mid..]).await?;
+                            } else {
+                                info!("Ignoring song already in playlist: {:?}", songs[0]);
+                            }
+                            return Ok(());
+                        }
+                    }
+
+                    // Once we have split the list enough times to reach a single element
+                    // we know that we have reached the song that is already in the playlist
+                    // and we can ignore it
+                    if let Some(add_to_toast_action) = action.add_to_toast_action {
+                        let message_contains_already_in_playlist = add_to_toast_action
+                            .item
+                            .notification_action_renderer
+                            .response_text
+                            .runs
+                            .iter()
+                            .any(|run| run.text.contains("This track is already in the playlist"));
+
+                        if message_contains_already_in_playlist {
+                            info!("Ignoring song already in playlist: {:?}", songs[0]);
+                            return Ok(());
+                        }
+                    }
+                }
+            }
+
+            return Err(eyre!("Error adding song to playlist. Response: {:?}", response.status));
         }
         Ok(())
     }
@@ -381,6 +442,12 @@ impl MusicApi for YtMusicApi {
     }
 
     async fn search_song(&self, song: &Song) -> Result<Option<Song>> {
+        debug!(
+            "Searching for song: {} by {}",
+            song.name,
+            song.artists.iter().map(|artist| artist.name.as_str()).collect::<Vec<&str>>().join(", ")
+        );
+
         if let Some(isrc) = &song.isrc {
             let body = json!({
                 "query": format!("\"{}\"", isrc),

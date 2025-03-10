@@ -404,8 +404,8 @@ impl MusicApi for SpotifyApi {
                     "song name is bigger than spotify max search: \"{}\", truncating",
                     track_query
                 );
-                // Not the best solution, but it's worth a try
-                track_query = track_query[..max_len].to_string();
+                /* Using a different method due to some exotic characters */
+                track_query = track_query.chars().take(max_len).collect();
             }
 
             let artist_queries: Vec<String> = song

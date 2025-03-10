@@ -79,6 +79,7 @@ impl TryInto<Playlist> for SpotifyPlaylistResponse {
             id: self.id,
             name: self.name.trim().to_string(),
             songs: vec![],
+            owner: Some(self.owner.id),
         })
     }
 }

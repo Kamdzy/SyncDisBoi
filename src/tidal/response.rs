@@ -74,6 +74,7 @@ impl TryInto<Playlist> for TidalPlaylistResponse {
             id: self.uuid,
             name: self.title.trim().to_string(),
             songs: vec![],
+            owner: Some("".to_string()) // TODO: get the owner
         })
     }
 }

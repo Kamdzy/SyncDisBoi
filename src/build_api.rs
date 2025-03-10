@@ -108,4 +108,23 @@ impl MusicPlatformSrc {
             Self::Tidal { dst, .. } => dst,
         }
     }
+
+    pub fn get_owner(&self) -> &str {
+        match self {
+            Self::YtMusic { owner, .. } => owner,
+            Self::Spotify { owner, .. } => owner,
+            Self::Tidal { owner, .. } => owner,
+        }
+    }
+}
+
+impl MusicPlatformDst {
+    pub fn get_owner(&self) -> &str {
+        match self {
+            Self::YtMusic { owner, .. } => owner,
+            Self::Spotify { owner, .. } => owner,
+            Self::Tidal { owner, .. } => owner,
+            MusicPlatformDst::Export { .. } => "", // Export does not have an owner field
+        }
+    }
 }
