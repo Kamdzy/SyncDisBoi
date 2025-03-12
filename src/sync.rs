@@ -7,13 +7,14 @@ use crate::utils::dedup_songs;
 use crate::ConfigArgs;
 
 // TODO: Parse playlist owner to ignore platform-specific playlists?
-const SKIPPED_PLAYLISTS: [&str; 10] = [
+const SKIPPED_PLAYLISTS: [&str; 11] = [
     // Yt Music specific
     "New playlist",
     "Your Likes",
     "My Supermix",
     "Discover Mix",
     "Episodes for Later",
+    "New Release Mix",
     // Spotify specific
     "Liked Songs",
     "Discover Weekly",
@@ -27,7 +28,7 @@ pub async fn synchronize(
     dst_api: DynMusicApi,
     config: ConfigArgs,
     skip_playlists: Vec<String>,
-    src_owner: String,
+    _src_owner: String,
     dst_owner: String,
 ) -> Result<()> {
     if !config.diff_country
@@ -57,7 +58,7 @@ pub async fn synchronize(
 
     /* Filter to specific playlists */
     // Filter by playlist name
-    // playlists.retain(|playlist| playlist.name == "sh22");
+    //src_playlists.retain(|playlist| playlist.name == "sh22");
 
     // Filter by playlist owner if we want to sync only our own playlists
     // src_playlists.retain(|playlist| playlist.owner == Some(src_owner.to_string()));
@@ -106,7 +107,7 @@ pub async fn synchronize(
 
         let mut missing_songs = json!([]);
         let mut new_songs = json!([]);
-        let mut no_albums_songs = json!([]);
+        let no_albums_songs = json!([]);
         let mut dst_songs = vec![];
         let mut success = 0;
         let mut attempts = 0;

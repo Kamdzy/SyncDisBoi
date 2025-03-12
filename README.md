@@ -4,6 +4,7 @@ SyncDisBoi is a simple and efficient tool designed to synchronize playlists acro
 - [Youtube Music](https://music.youtube.com/)
 - [Spotify](https://open.spotify.com/)
 - [Tidal](https://tidal.com/)
+- [Plex](https://www.plex.tv/)
 
 SyncDisBoi is the ideal tool for music enthusiasts who want to:
 - Seamlessly migrate to a new music platform while preserving their playlists and likes

@@ -6,6 +6,7 @@ use sync_dis_boi::music_api::DynMusicApi;
 use sync_dis_boi::spotify::SpotifyApi;
 use sync_dis_boi::tidal::TidalApi;
 use sync_dis_boi::yt_music::YtMusicApi;
+use sync_dis_boi::plex::PlexApi;
 
 use crate::args::{MusicPlatformDst, MusicPlatformSrc, RootArgs};
 
@@ -86,6 +87,22 @@ macro_rules! impl_build_api {
                             .await?,
                         )
                     }
+                    Self::Plex {
+                        server_url,
+                        plex_token,
+                        music_library,
+                        ..
+                    } => {
+                        Box::new(
+                            PlexApi::new(
+                                &server_url,
+                                &plex_token,
+                                &music_library,
+                                args.config.clone(),
+                            )
+                            .await?,
+                        )
+                    }
                     #[allow(unreachable_patterns)]
                     _ => return Err(eyre!("Invalid API type: {:?}", self)),
                 };
@@ -106,6 +123,7 @@ impl MusicPlatformSrc {
             Self::YtMusic { dst, .. } => dst,
             Self::Spotify { dst, .. } => dst,
             Self::Tidal { dst, .. } => dst,
+            Self::Plex { dst, .. } => dst,
         }
     }
 
@@ -114,6 +132,7 @@ impl MusicPlatformSrc {
             Self::YtMusic { owner, .. } => owner,
             Self::Spotify { owner, .. } => owner,
             Self::Tidal { owner, .. } => owner,
+            Self::Plex { owner, .. } => owner,
         }
     }
 }
@@ -124,6 +143,7 @@ impl MusicPlatformDst {
             Self::YtMusic { owner, .. } => owner,
             Self::Spotify { owner, .. } => owner,
             Self::Tidal { owner, .. } => owner,
+            Self::Plex { owner, .. } => owner,
             MusicPlatformDst::Export { .. } => "", // Export does not have an owner field
         }
     }

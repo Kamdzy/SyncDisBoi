@@ -5,6 +5,7 @@ pub mod sync;
 pub mod tidal;
 pub mod utils;
 pub mod yt_music;
+pub mod plex;
 
 use clap::Parser;
 

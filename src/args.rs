@@ -55,7 +55,8 @@ pub enum MusicPlatformSrc {
         #[arg(long, requires = "client_id", requires = "client_secret")]
         clear_cache: bool,
         /// The owner of the playlists, this is required to know which playlists to skip
-        #[arg(long)]
+        #[arg(long,
+            env = "YTMUSIC_OWNER")]
         owner: String,
         /// The destination music platform
         #[command(subcommand)]
@@ -72,7 +73,8 @@ pub enum MusicPlatformSrc {
         #[arg(long)]
         clear_cache: bool,
         /// The owner of the playlists, this is required to know which playlists to skip
-        #[arg(long)]
+        #[arg(long,
+            env = "SPOTIFY_OWNER")]
         owner: String,
         /// The destination music platform
         #[command(subcommand)]
@@ -93,7 +95,37 @@ pub enum MusicPlatformSrc {
         #[arg(long)]
         clear_cache: bool,
         /// The owner of the playlists, this is required to know which playlists to skip
-        #[arg(long)]
+        #[arg(long,
+            env = "TIDAL_OWNER")]
+        owner: String,
+        /// The destination music platform
+        #[command(subcommand)]
+        dst: MusicPlatformDst,
+    },
+    Plex {
+        #[arg(
+            long,
+            env = "PLEX_SERVER_URL",
+            //default_value = "http://localhost:32400"
+        )]
+        server_url: String,
+        /// The plex token to authenticate with the Plex server
+        #[arg(
+            long,
+            env = "PLEX_TOKEN",
+            //default_value = "SboVhoG9s0rNafixCSGGKXAT"
+        )]
+        plex_token: String,
+        /// Music library to create playlists in
+        #[arg(
+            long,
+            env = "MUSIC_LIBRARY",
+            //default_value = "Music"
+        )]
+        music_library: String,
+        /// The owner of the playlists, this is required to know which playlists to skip
+        #[arg(long,
+            env = "PLEX_OWNER")]
         owner: String,
         /// The destination music platform
         #[command(subcommand)]
@@ -135,7 +167,8 @@ pub enum MusicPlatformDst {
         #[arg(long, requires = "client_id", requires = "client_secret")]
         clear_cache: bool,
         /// The owner of the playlists, this is required to know which playlists to skip
-        #[arg(long)]
+        #[arg(long,
+            env = "YTMUSIC_OWNER")]
         owner: String,
     },
     Spotify {
@@ -149,7 +182,8 @@ pub enum MusicPlatformDst {
         #[arg(long)]
         clear_cache: bool,
         /// The owner of the playlists, this is required to know which playlists to skip
-        #[arg(long)]
+        #[arg(long,
+            env = "SPOTIFY_OWNER")]
         owner: String,
     },
     Tidal {
@@ -167,7 +201,35 @@ pub enum MusicPlatformDst {
         #[arg(long)]
         clear_cache: bool,
         /// The owner of the playlists, this is required to know which playlists to skip
-        #[arg(long)]
+        #[arg(long,
+            env = "TIDAL_OWNER")]
+        owner: String,
+    },
+    
+    Plex {
+        #[arg(
+            long,
+            env = "PLEX_SERVER_URL",
+            //default_value = "http://localhost:32400"
+        )]
+        server_url: String,
+        /// The plex token to authenticate with the Plex server
+        #[arg(
+            long,
+            env = "PLEX_TOKEN",
+            //default_value = "SboVhoG9s0rNafixCSGGKXAT"
+        )]
+        plex_token: String,
+        /// Music library name to create playlists in
+        #[arg(
+            long,
+            env = "MUSIC_LIBRARY",
+            //default_value = "Music"
+        )]
+        music_library: String,
+        /// The owner of the playlists, this is required to know which playlists to skip
+        #[arg(long,
+            env = "PLEX_OWNER")]
         owner: String,
     },
     Export {
