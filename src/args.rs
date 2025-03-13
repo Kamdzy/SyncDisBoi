@@ -15,11 +15,11 @@ pub struct RootArgs {
     pub config: ConfigArgs,
 
     /// Logging level
-    #[arg(short, long, value_enum, default_value_t = LoggingLevel::Info)]
+    #[arg(short, long, value_enum, default_value_t = LoggingLevel::Info, env = "LOGGING_LEVEL")]
     pub logging: LoggingLevel,
 
     /// List of playlist names to skip, separated by '|'
-    #[arg(long, use_value_delimiter = true, value_delimiter = '|')]
+    #[arg(long, use_value_delimiter = true, value_delimiter = '|', env = "SKIP_PLAYLISTS")]
     pub skip_playlists: Vec<String>,
 }
 

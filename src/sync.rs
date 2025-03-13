@@ -34,6 +34,8 @@ pub async fn synchronize(
     if !config.diff_country
         && src_api.api_type() != MusicApiType::YtMusic
         && dst_api.api_type() != MusicApiType::YtMusic
+        && src_api.api_type() != MusicApiType::Plex // TODO: Revert once Plex country code is added
+        && dst_api.api_type() != MusicApiType::Plex
         && src_api.country_code() != dst_api.country_code()
     {
         return Err(eyre!(
