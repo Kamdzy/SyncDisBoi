@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
 
+# Determine the config directory
+CONFIG_DIR=${CONFIG_DIR:-$HOME/.config/SyncDisBoi}
+
 # Optional
 # Dynamically load the env variables from the args.ini file
-if [ -f "$HOME/.config/SyncDisBoi/args.ini" ]; then
-    source "$HOME/.config/SyncDisBoi/args.ini"
+if [ -f "$CONFIG_DIR/args.ini" ]; then
+    source "$CONFIG_DIR/args.ini"
 fi
 
 # Run the script using env variables if they're set either from args.ini or from the docker run command
