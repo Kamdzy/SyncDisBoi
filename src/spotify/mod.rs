@@ -106,7 +106,7 @@ impl SpotifyApi {
 
     async fn request_token(client_id: &str, client_secret: &str, callback_host: &str, callback_port: &str) -> Result<OAuthToken> {
         let auth_url = SpotifyApi::build_authorization_url(client_id, callback_host, callback_port)?;
-        let auth_code = SpotifyApi::listen_for_code(&auth_url, callback_host, callback_port).await?;
+        let auth_code = SpotifyApi::listen_for_code(&auth_url, callback_port).await?;
         let final_callback_host = if callback_host == "0.0.0.0" {
             "localhost"
         } else {
@@ -176,13 +176,8 @@ impl SpotifyApi {
         )
     }
 
-    async fn listen_for_code(auth_url: &str, callback_host: &str, callback_port: &str) -> Result<String> {
-        let final_callback_host = if callback_host == "0.0.0.0" {
-            "localhost"
-        } else {
-            callback_host
-        };
-        let bind_address = format!("{}:{}", final_callback_host, callback_port);
+    async fn listen_for_code(auth_url: &str, callback_port: &str) -> Result<String> {
+        let bind_address = format!("0.0.0.0:{}", callback_port);
 
         let listener = TcpListener::bind(&bind_address).await?;
         if webbrowser::open(&auth_url).is_err() {
