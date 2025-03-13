@@ -31,8 +31,12 @@ async fn main() -> Result<()> {
         .init();
     debug!("logging level: {}", level);
 
-    let config_dir = dirs::config_dir().ok_or(eyre!("couldn't find system config dir"))?;
-    let config_dir = config_dir.join("SyncDisBoi");
+    let config_dir = if let Ok(env_config_dir) = std::env::var("CONFIG_DIR") {
+        std::path::PathBuf::from(env_config_dir)
+    } else {
+        dirs::config_dir().ok_or(eyre!("couldn't find system config dir"))?.join("SyncDisBoi")
+    };
+    
     if !config_dir.exists() {
         info!("creating SyncDisBoi config directory: {:?}", config_dir);
         std::fs::create_dir_all(&config_dir)?;

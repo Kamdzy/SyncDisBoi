@@ -35,4 +35,8 @@ pub struct ConfigArgs {
     /// Proxy to use for all requests in the format http://<ip>:<port>
     #[arg(long)]
     pub proxy: Option<String>,
+
+    /// Optionally replace the config directory
+    #[arg(long, env = "CONFIG_DIR")]
+    pub config_dir: Option<String>,
 }
