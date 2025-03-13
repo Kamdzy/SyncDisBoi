@@ -76,6 +76,12 @@ pub enum MusicPlatformSrc {
         #[arg(long,
             env = "SPOTIFY_OWNER")]
         owner: String,
+        /// Callback host for the Spotify API
+        #[arg(long, env = "SPOTIFY_CALLBACK_HOST", default_value = "0.0.0.0")]
+        callback_host: String,
+        /// Callback port for the Spotify API
+        #[arg(long, env = "SPOTIFY_CALLBACK_PORT", default_value = "8888")]
+        callback_port: String,
         /// The destination music platform
         #[command(subcommand)]
         dst: MusicPlatformDst,
@@ -185,6 +191,12 @@ pub enum MusicPlatformDst {
         #[arg(long,
             env = "SPOTIFY_OWNER")]
         owner: String,
+        /// Callback host for the Spotify API
+        #[arg(long, env = "SPOTIFY_CALLBACK_HOST", default_value = "0.0.0.0")]
+        callback_host: String,
+        /// Callback port for the Spotify API
+        #[arg(long, env = "SPOTIFY_CALLBACK_PORT", default_value = "8888")]
+        callback_port: String
     },
     Tidal {
         /// The client ID for the Tidal API application

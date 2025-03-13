@@ -42,8 +42,6 @@ enum HttpMethod<'a> {
 
 impl SpotifyApi {
     const BASE_API: &'static str = "https://api.spotify.com/v1";
-    const REDIRECT_URI_HOST: &'static str = "localhost:8888";
-    const REDIRECT_URI_URL: &'static str = "http://localhost:8888/callback";
     const TOKEN_URL: &'static str = "https://accounts.spotify.com/api/token";
     const SCOPES: &'static [&'static str] = &[
         "user-read-email",
@@ -62,10 +60,12 @@ impl SpotifyApi {
         client_secret: &str,
         oauth_token_path: PathBuf,
         clear_cache: bool,
+        callback_host: &str,
+        callback_port: &str,
         config: ConfigArgs,
     ) -> Result<Self> {
         let token = if !oauth_token_path.exists() || clear_cache {
-            Self::request_token(client_id, client_secret).await?
+            Self::request_token(client_id, client_secret, callback_host, callback_port).await?
         } else {
             info!("refreshing token");
             Self::refresh_token(client_id, client_secret, &oauth_token_path).await?
@@ -100,18 +100,25 @@ impl SpotifyApi {
         Ok(Self {
             client,
             config,
-            country_code,
+            country_code
         })
     }
 
-    async fn request_token(client_id: &str, client_secret: &str) -> Result<OAuthToken> {
-        let auth_url = SpotifyApi::build_authorization_url(client_id)?;
-        let auth_code = SpotifyApi::listen_for_code(&auth_url).await?;
+    async fn request_token(client_id: &str, client_secret: &str, callback_host: &str, callback_port: &str) -> Result<OAuthToken> {
+        let auth_url = SpotifyApi::build_authorization_url(client_id, callback_host, callback_port)?;
+        let auth_code = SpotifyApi::listen_for_code(&auth_url, callback_host, callback_port).await?;
+        let final_callback_host = if callback_host == "0.0.0.0" {
+            "localhost"
+        } else {
+            callback_host
+        };
+        let redirect_uri_url  = format!("http://{}:{}/callback", final_callback_host, callback_port);
+
 
         let mut params = HashMap::new();
         params.insert("grant_type", "authorization_code");
         params.insert("code", &auth_code);
-        params.insert("redirect_uri", Self::REDIRECT_URI_URL);
+        params.insert("redirect_uri", &redirect_uri_url);
 
         let client = reqwest::Client::new();
         let res = client
@@ -149,13 +156,19 @@ impl SpotifyApi {
         Ok(oauth_token)
     }
 
-    fn build_authorization_url(client_id: &str) -> Result<String> {
+    fn build_authorization_url(client_id: &str, callback_host: &str, callback_port: &str) -> Result<String> {
+        let final_callback_host = if callback_host == "0.0.0.0" {
+            "localhost"
+        } else {
+            callback_host
+        };
+        let redirect_uri_url  = format!("http://{}:{}/callback", final_callback_host, callback_port);
         let mut params = HashMap::new();
         params.insert("response_type", "code");
         let scopes = SpotifyApi::SCOPES.iter().as_slice().join(" ").to_string();
         params.insert("scope", &scopes);
         params.insert("client_id", client_id);
-        params.insert("redirect_uri", SpotifyApi::REDIRECT_URI_URL);
+        params.insert("redirect_uri", &redirect_uri_url);
 
         Ok(
             reqwest::Url::parse_with_params("https://accounts.spotify.com/authorize", params)?
@@ -163,11 +176,21 @@ impl SpotifyApi {
         )
     }
 
-    async fn listen_for_code(auth_url: &str) -> Result<String> {
-        let listener = TcpListener::bind(SpotifyApi::REDIRECT_URI_HOST).await?;
-        webbrowser::open(auth_url)?;
+    async fn listen_for_code(auth_url: &str, callback_host: &str, callback_port: &str) -> Result<String> {
+        let final_callback_host = if callback_host == "0.0.0.0" {
+            "localhost"
+        } else {
+            callback_host
+        };
+        let bind_address = format!("{}:{}", final_callback_host, callback_port);
 
-        info!("Please authorize the app in your browser");
+        let listener = TcpListener::bind(&bind_address).await?;
+        if webbrowser::open(&auth_url).is_err() {
+            info!("Please authorize the app by visiting the following URL: {}", auth_url);
+        } else {
+            info!("Please authorize the app in your browser and press enter");
+        }
+
         let (socket, _) = listener.accept().await?;
 
         socket.readable().await?;
@@ -179,7 +202,7 @@ impl SpotifyApi {
         if splits.len() <= 1 {
             return Err(eyre!("Invalid spotify server callback"));
         }
-        let url = format!("{}{}", SpotifyApi::REDIRECT_URI_HOST, splits[1]);
+        let url = format!("{}{}", bind_address, splits[1]);
         let auth_code = reqwest::Url::parse(&url)?
             .query_pairs()
             .find(|pair| pair.0 == "code")
