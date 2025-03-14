@@ -235,7 +235,7 @@ pub enum MusicPlatformDst {
         /// Music library name to create playlists in
         #[arg(
             long,
-            env = "MUSIC_LIBRARY",
+            env = "PLEX_MUSIC_LIBRARY",
             //default_value = "Music"
         )]
         music_library: String,
