@@ -18,7 +18,7 @@ if [ -f "$CONFIG_DIR/args.ini" ]; then
 
         # Export as environment variable
         export "$key"="$value"
-    done < "$CONFIG_DIR/args.ini"
+    done < <(awk -F= '{print $1"="$2}' "$CONFIG_DIR/args.ini")
 fi
 
 # Run the script using env variables if they are set either from args.ini or from the docker run command
