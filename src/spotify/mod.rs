@@ -265,18 +265,36 @@ impl SpotifyApi {
             HttpMethod::Put(b) => self.client.put(endpoint).json(b),
             HttpMethod::Delete(b) => self.client.delete(endpoint).json(b),
         };
+        let retries = 3;
         request = request.query(&[("limit", limit), ("offset", offset)]);
-        let res = request.send().await?;
-        if res.status() == StatusCode::TOO_MANY_REQUESTS {
-            self.api_rate_wait(&res).await?;
-            // Retry request
-            return self.make_request(path, method, limit, offset).await;
+        for attempt in 0..=retries {
+            let mut request_clone = request.try_clone().expect("Failed to clone request");
+            request_clone = request_clone.query(&[("limit", limit), ("offset", offset)]);
+            let res = request_clone.send().await;
+            match res {
+                Ok(res) => {
+                    if res.status() == StatusCode::TOO_MANY_REQUESTS {
+                        self.api_rate_wait(&res).await?;
+                        // Retry request
+                        return self.make_request(path, method, limit, offset).await;
+                    }
+                    let res = res.error_for_status()?;
+                    if res.status() != StatusCode::OK && res.status() != StatusCode::CREATED {
+                        return Err(eyre!("Invalid response: {}", res.text().await?));
+                    }
+                    return Ok(res);
+                }
+                Err(err) => {
+                    if attempt == retries {
+                        return Err(eyre!("Request failed after {} attempts: {}", retries, err));
+                    }
+                    warn!("Request failed (attempt {}): {}. Retrying...", attempt + 1, err);
+                    tokio::time::sleep(Duration::from_secs(1)).await;
+                }
+            }
         }
-        let res = res.error_for_status()?;
-        if res.status() != StatusCode::OK && res.status() != StatusCode::CREATED {
-            return Err(eyre!("Invalid response: {}", res.text().await?));
-        }
-        Ok(res)
+
+        Err(eyre!("Request failed after {} attempts", retries))
     }
 
     async fn make_request_json<T>(

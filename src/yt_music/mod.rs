@@ -318,8 +318,6 @@ impl MusicApi for YtMusicApi {
         } else {
             format!("VL{}", id)
         };
-        
-        info!("Getting playlist songs for: {}", browse_id);
 
         let body = json!({ "browseId": browse_id });
         let response = self.paginated_request("browse", &body).await?;
