@@ -15,11 +15,11 @@ pub struct RootArgs {
     pub config: ConfigArgs,
 
     /// Logging level
-    #[arg(short, long, value_enum, default_value_t = LoggingLevel::Info)]
+    #[arg(short, long, value_enum, default_value_t = LoggingLevel::Info, env = "LOGGING_LEVEL")]
     pub logging: LoggingLevel,
 
     /// List of playlist names to skip, separated by '|'
-    #[arg(long, use_value_delimiter = true, value_delimiter = '|')]
+    #[arg(long, use_value_delimiter = true, value_delimiter = '|', env = "SKIP_PLAYLISTS")]
     pub skip_playlists: Vec<String>,
 }
 
@@ -76,6 +76,12 @@ pub enum MusicPlatformSrc {
         #[arg(long,
             env = "SPOTIFY_OWNER")]
         owner: String,
+        /// Callback host for the Spotify API
+        #[arg(long, env = "SPOTIFY_CALLBACK_HOST", default_value = "0.0.0.0")]
+        callback_host: String,
+        /// Callback port for the Spotify API
+        #[arg(long, env = "SPOTIFY_CALLBACK_PORT", default_value = "8888")]
+        callback_port: String,
         /// The destination music platform
         #[command(subcommand)]
         dst: MusicPlatformDst,
@@ -119,7 +125,7 @@ pub enum MusicPlatformSrc {
         /// Music library to create playlists in
         #[arg(
             long,
-            env = "MUSIC_LIBRARY",
+            env = "PLEX_MUSIC_LIBRARY",
             //default_value = "Music"
         )]
         music_library: String,
@@ -185,6 +191,12 @@ pub enum MusicPlatformDst {
         #[arg(long,
             env = "SPOTIFY_OWNER")]
         owner: String,
+        /// Callback host for the Spotify API
+        #[arg(long, env = "SPOTIFY_CALLBACK_HOST", default_value = "0.0.0.0")]
+        callback_host: String,
+        /// Callback port for the Spotify API
+        #[arg(long, env = "SPOTIFY_CALLBACK_PORT", default_value = "8888")]
+        callback_port: String
     },
     Tidal {
         /// The client ID for the Tidal API application
@@ -223,7 +235,7 @@ pub enum MusicPlatformDst {
         /// Music library name to create playlists in
         #[arg(
             long,
-            env = "MUSIC_LIBRARY",
+            env = "PLEX_MUSIC_LIBRARY",
             //default_value = "Music"
         )]
         music_library: String,

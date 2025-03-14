@@ -104,8 +104,12 @@ impl TidalApi {
         let device_res: TidalOAuthDeviceRes = res.json().await?;
         let url = format!("https://{}", device_res.verification_uri_complete);
 
-        webbrowser::open(&url)?;
-        info!("please authorize the app in your browser and press enter");
+        if webbrowser::open(&url).is_err() {
+            info!("Please authorize the app by visiting the following URL: {}", url);
+        } else {
+            info!("Please authorize the app in your browser and press enter");
+        }
+
         std::io::stdin().read_exact(&mut [0])?;
 
         let auth_token = OAuthReqToken {

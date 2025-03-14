@@ -15,7 +15,7 @@ use clap::Parser;
 pub struct ConfigArgs {
     /// Enable debug mode to display and generate debug information during
     /// synchronization This is useful during development
-    #[arg(long, default_value = "false")]
+    #[arg(long, default_value = "false", env = "DEBUG")]
     pub debug: bool,
 
     /// Like all songs that will be synchronized on the destination platform
@@ -35,4 +35,8 @@ pub struct ConfigArgs {
     /// Proxy to use for all requests in the format http://<ip>:<port>
     #[arg(long)]
     pub proxy: Option<String>,
+
+    /// Optionally replace the config directory
+    #[arg(long, env = "CONFIG_DIR")]
+    pub config_dir: Option<String>,
 }

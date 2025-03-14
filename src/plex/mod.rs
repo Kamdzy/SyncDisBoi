@@ -18,8 +18,7 @@ pub struct PlexApi {
     config: ConfigArgs,
     user_id: String,
     music_library: String,
-    uri_root: String,
-    country_code: String,
+    uri_root: String
 }
 
 impl PlexApi {
@@ -68,8 +67,7 @@ impl PlexApi {
             config,
             user_id: logged_in_user.username,
             music_library: music_library.into(),
-            uri_root: uri_root.into(),
-            country_code: String::new(),
+            uri_root: uri_root.into()
         })
 
     }
@@ -210,7 +208,8 @@ impl MusicApi for PlexApi {
     }
 
     fn country_code(&self) -> &str {
-        &self.country_code
+        // TODO: it seems that plex has a country code, just need to convert it properly
+        "UNKNOWN"
     }
 
     async fn create_playlist(&self, name: &str, _public: bool) -> Result<Playlist> {
