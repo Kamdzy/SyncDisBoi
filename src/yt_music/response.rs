@@ -81,7 +81,7 @@ impl TryInto<Songs> for YtMusicResponse {
             let id = mrlir.get_id().ok_or(eyre!("No song id"))?;
             let set_id = mrlir.get_set_id().ok_or(eyre!("No song set_id"))?;
 
-            let duration_str = {
+            let mut duration_str = {
                 // Check both fixed_columns and flex_columns for the duration
                 let fixed_cols = mrlir.fixed_columns.as_ref();
                 let flex_cols = mrlir.flex_columns.as_ref();
@@ -135,7 +135,36 @@ impl TryInto<Songs> for YtMusicResponse {
                 }
             };
 
-            if duration_str.is_empty() {
+            if duration_str.is_empty() || !duration_str.contains(":") {
+                // Attempt to find duration from another source or format
+                let alternative_duration_str = {
+                    if let Some(flex_cols) = &mrlir.flex_columns {
+                        if let Some(flex_col) = flex_cols.get(3) {
+                            if let Some(runs) = &flex_col.music_responsive_list_item_flex_column_renderer.text.runs {
+                                if let Some(run) = runs.first() {
+                                    run.text.clone()
+                                } else {
+                                    String::new()
+                                }
+                            } else {
+                                String::new()
+                            }
+                        } else {
+                            String::new()
+                        }
+                    } else {
+                        String::new()
+                    }
+                };
+            
+                if alternative_duration_str.is_empty() || !alternative_duration_str.contains(":") {
+                    return Err(eyre!("Failed to extract duration from fixed_columns or alternative source"));
+                } else {
+                    duration_str = alternative_duration_str;
+                }
+            };
+
+            if duration_str.is_empty() || !duration_str.contains(":") {
                 info!("Full item data: {:?}", mrlir);
                 info!("Flex columns: {:?}", mrlir.flex_columns);
                 info!("Fixed columns: {:?}", mrlir.fixed_columns);
