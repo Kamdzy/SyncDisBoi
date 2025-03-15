@@ -1,5 +1,6 @@
 use color_eyre::eyre::{eyre, Result};
 use serde_json::json;
+use tokio::time::{sleep, Duration};
 use tracing::{debug, info, warn};
 
 use crate::music_api::{DynMusicApi, MusicApiType, Song};
@@ -129,6 +130,19 @@ pub async fn synchronize(
             if dst_playlist.songs.contains(src_song) {
                 continue;
             }
+
+            // YtMusic API rate limit workaround
+            if dst_api.api_type() == MusicApiType::YtMusic {
+                static mut SONG_COUNTER: usize = 0;
+                unsafe {
+                    SONG_COUNTER += 1;
+                    if SONG_COUNTER % 300 == 0 {
+                        info!("Reached 300 songs, taking a 3-minute break...");
+                        sleep(Duration::from_secs(180)).await;
+                    }
+                }
+            }
+
             // no album metadata == youtube video
             /* Commented this part out, personal preference */
             // if src_song.album.is_none() {
