@@ -134,11 +134,13 @@ pub async fn synchronize(
             // YtMusic API rate limit workaround
             if dst_api.api_type() == MusicApiType::YtMusic {
                 static mut SONG_COUNTER: usize = 0;
+                static mut SLEEP_DURATION: u64 = 180; // Initial sleep duration in seconds (3 minutes)
                 unsafe {
                     SONG_COUNTER += 1;
                     if SONG_COUNTER % 300 == 0 {
-                        info!("Reached 300 songs, taking a 3-minute break...");
-                        sleep(Duration::from_secs(180)).await;
+                        info!("Reached 300 songs, taking a {}-second break...", SLEEP_DURATION);
+                        sleep(Duration::from_secs(SLEEP_DURATION)).await;
+                        SLEEP_DURATION += 60; // Add 60 seconds to the sleep duration each time
                     }
                 }
             }
