@@ -92,6 +92,10 @@ pub async fn synchronize(
         }
     });
 
+    
+    static mut SONG_COUNTER: usize = 0;
+    static mut SLEEP_DURATION: u64 = 180; // Initial sleep duration in seconds (3 minutes)
+
     for mut src_playlist in src_playlists
         .into_iter()
         .filter(|p| !SKIPPED_PLAYLISTS.contains(&p.name.as_str()) && !p.songs.is_empty())
@@ -133,8 +137,6 @@ pub async fn synchronize(
 
             // YtMusic API rate limit workaround
             if dst_api.api_type() == MusicApiType::YtMusic {
-                static mut SONG_COUNTER: usize = 0;
-                static mut SLEEP_DURATION: u64 = 180; // Initial sleep duration in seconds (3 minutes)
                 unsafe {
                     SONG_COUNTER += 1;
                     if SONG_COUNTER % 300 == 0 {
