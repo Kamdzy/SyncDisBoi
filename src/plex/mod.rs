@@ -212,7 +212,7 @@ impl MusicApi for PlexApi {
         "UNKNOWN"
     }
 
-    async fn create_playlist(&self, name: &str, _public: bool) -> Result<Playlist> {
+    async fn create_playlist(&mut self, name: &str, _public: bool) -> Result<Playlist> {
         // Get first track from library
         let first_track = self.get_first_library_track().await?;
 
@@ -258,7 +258,7 @@ impl MusicApi for PlexApi {
         Ok(playlists.0[0].clone())
     }
     
-    async fn get_playlists_info(&self) -> Result<Vec<Playlist>> {
+    async fn get_playlists_info(&mut self) -> Result<Vec<Playlist>> {
         // get all playlist names and ids
         let response = self.client
             .get(format!("{}/playlists", self.server_url))
@@ -298,7 +298,7 @@ impl MusicApi for PlexApi {
         Ok(res_playlists)
     }
 
-    async fn get_playlist_songs(&self, id: &str) -> Result<Vec<Song>> {
+    async fn get_playlist_songs(&mut self, id: &str) -> Result<Vec<Song>> {
         // get all songs in a playlist
         let response = self.client
             .get(format!("{}/playlists/{}/items", self.server_url, id))
@@ -316,7 +316,7 @@ impl MusicApi for PlexApi {
         Ok(res_songs.0)
     }
 
-    async fn add_songs_to_playlist(&self, playlist: &mut Playlist, songs: &[Song]) -> Result<()> {
+    async fn add_songs_to_playlist(&mut self, playlist: &mut Playlist, songs: &[Song]) -> Result<()> {
         // add songs to a playlist in batches of 5
         for chunk in songs.chunks(5) {
             let rating_keys: Vec<String> = chunk.iter()
@@ -338,17 +338,17 @@ impl MusicApi for PlexApi {
         Ok(())
     }
     async fn remove_songs_from_playlist(
-        &self,
+        &mut self,
         _playlist: &mut Playlist,
         _songs_ids: &[Song],
     ) -> Result<()> {
         todo!()
     }
-    async fn delete_playlist(&self, _playlist: Playlist) -> Result<()> {
+    async fn delete_playlist(&mut self, _playlist: Playlist) -> Result<()> {
         todo!()
     }
 
-    async fn search_song(&self, song: &Song) -> Result<Option<Song>> {
+    async fn search_song(&mut self, song: &Song) -> Result<Option<Song>> {
         let mut queries = song.build_queries();
 
         while let Some(query) = queries.pop() {
@@ -365,11 +365,11 @@ impl MusicApi for PlexApi {
         Ok(None)
     }
 
-    async fn add_like(&self, _songs: &[Song]) -> Result<()> {
+    async fn add_like(&mut self, _songs: &[Song]) -> Result<()> {
         Ok(())
         // todo!()
     }
-    async fn get_likes(&self) -> Result<Vec<Song>> {
+    async fn get_likes(&mut self) -> Result<Vec<Song>> {
         Ok(vec![])
         //todo!()
     }

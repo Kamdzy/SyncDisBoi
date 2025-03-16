@@ -1,6 +1,5 @@
 use async_trait::async_trait;
 use color_eyre::eyre::Result;
-use futures::future::try_join_all;
 use serde::{Deserialize, Serialize};
 use strsim::normalized_levenshtein;
 use tracing::debug;
@@ -9,53 +8,50 @@ use crate::utils::generic_name_clean;
 
 pub const PLAYLIST_DESC: &str = "Playlist created by SyncDisBoi";
 
-pub type DynMusicApi = Box<dyn MusicApi + Sync>;
+pub type DynMusicApi = Box<dyn MusicApi + Sync + Send>;
 
 #[async_trait]
 pub trait MusicApi {
     fn api_type(&self) -> MusicApiType;
     fn country_code(&self) -> &str;
 
-    async fn create_playlist(&self, name: &str, public: bool) -> Result<Playlist>;
-    async fn get_playlists_info(&self) -> Result<Vec<Playlist>>;
-    async fn get_playlist_songs(&self, id: &str) -> Result<Vec<Song>>;
+    async fn create_playlist(&mut self, name: &str, public: bool) -> Result<Playlist>;
+    async fn get_playlists_info(&mut self) -> Result<Vec<Playlist>>;
+    async fn get_playlist_songs(&mut self, id: &str) -> Result<Vec<Song>>;
 
-    async fn get_playlists_full(&self) -> Result<Vec<Playlist>> {
+    async fn get_playlists_full(&mut self) -> Result<Vec<Playlist>> {
         let mut playlists = self.get_playlists_info().await?;
 
-        let mut requests = vec![];
         for playlist in playlists.iter_mut() {
-            requests.push(self.get_playlist_songs(&playlist.id));
-        }
-        let results = try_join_all(requests).await?;
-        for (i, songs) in results.into_iter().enumerate() {
-            playlists[i].songs = songs;
+            let songs = self.get_playlist_songs(&playlist.id).await?;
+            playlist.songs = songs;
         }
 
         Ok(playlists)
     }
 
-    async fn add_songs_to_playlist(&self, playlist: &mut Playlist, songs: &[Song]) -> Result<()>;
+    async fn add_songs_to_playlist(&mut self, playlist: &mut Playlist, songs: &[Song]) -> Result<()>;
     async fn remove_songs_from_playlist(
-        &self,
+        &mut self,
         playlist: &mut Playlist,
         songs_ids: &[Song],
     ) -> Result<()>;
-    async fn delete_playlist(&self, playlist: Playlist) -> Result<()>;
+    async fn delete_playlist(&mut self, playlist: Playlist) -> Result<()>;
 
-    async fn search_song(&self, song: &Song) -> Result<Option<Song>>;
+    async fn search_song(&mut self, song: &Song) -> Result<Option<Song>>;
 
-    async fn search_songs(&self, songs: &[Song]) -> Result<Vec<Option<Song>>> {
-        let mut requests = vec![];
+    async fn search_songs(&mut self, songs: &[Song]) -> Result<Vec<Option<Song>>> {
+        let mut results = Vec::new();
+
         for song in songs.iter() {
-            requests.push(self.search_song(song));
+            results.push(self.search_song(song).await?);
         }
-        let results = try_join_all(requests).await?;
+
         Ok(results)
     }
 
-    async fn add_like(&self, songs: &[Song]) -> Result<()>;
-    async fn get_likes(&self) -> Result<Vec<Song>>;
+    async fn add_like(&mut self, songs: &[Song]) -> Result<()>;
+    async fn get_likes(&mut self) -> Result<Vec<Song>>;
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq)]

@@ -232,7 +232,7 @@ impl MusicApi for TidalApi {
         &self.country_code
     }
 
-    async fn create_playlist(&self, name: &str, public: bool) -> Result<Playlist> {
+    async fn create_playlist(&mut self, name: &str, public: bool) -> Result<Playlist> {
         let url = format!(
             "{}/v2/my-collection/playlists/folders/create-playlist",
             Self::API_URL
@@ -255,7 +255,7 @@ impl MusicApi for TidalApi {
         })
     }
 
-    async fn get_playlists_info(&self) -> Result<Vec<Playlist>> {
+    async fn get_playlists_info(&mut self) -> Result<Vec<Playlist>> {
         let url = format!("{}/v1/users/{}/playlists", Self::API_URL, self.user_id);
         let params = json!({
             "countryCode": self.country_code,
@@ -267,7 +267,7 @@ impl MusicApi for TidalApi {
         Ok(playlists.0)
     }
 
-    async fn get_playlist_songs(&self, id: &str) -> Result<Vec<Song>> {
+    async fn get_playlist_songs(&mut self, id: &str) -> Result<Vec<Song>> {
         let url = format!("{}/v1/playlists/{}/items", Self::API_URL, id);
         let params = json!({
             "countryCode": self.country_code,
@@ -279,7 +279,7 @@ impl MusicApi for TidalApi {
         Ok(songs.0)
     }
 
-    async fn add_songs_to_playlist(&self, playlist: &mut Playlist, songs: &[Song]) -> Result<()> {
+    async fn add_songs_to_playlist(&mut self, playlist: &mut Playlist, songs: &[Song]) -> Result<()> {
         if songs.is_empty() {
             return Ok(());
         }
@@ -317,14 +317,14 @@ impl MusicApi for TidalApi {
     }
 
     async fn remove_songs_from_playlist(
-        &self,
+        &mut self,
         _playlist: &mut Playlist,
         _songs_ids: &[Song],
     ) -> Result<()> {
         todo!()
     }
 
-    async fn delete_playlist(&self, playlist: Playlist) -> Result<()> {
+    async fn delete_playlist(&mut self, playlist: Playlist) -> Result<()> {
         let url = format!(
             "{}/v2/my-collection/playlists/folders/remove",
             Self::API_URL
@@ -338,7 +338,7 @@ impl MusicApi for TidalApi {
         Ok(())
     }
 
-    async fn search_song(&self, song: &Song) -> Result<Option<Song>> {
+    async fn search_song(&mut self, song: &Song) -> Result<Option<Song>> {
         if let Some(isrc) = &song.isrc {
             let url = format!("{}/tracks", Self::API_V2_URL);
             let params = json!({
@@ -382,7 +382,7 @@ impl MusicApi for TidalApi {
         Ok(None)
     }
 
-    async fn add_like(&self, songs: &[Song]) -> Result<()> {
+    async fn add_like(&mut self, songs: &[Song]) -> Result<()> {
         if songs.is_empty() {
             return Ok(());
         }
@@ -407,7 +407,7 @@ impl MusicApi for TidalApi {
         Ok(())
     }
 
-    async fn get_likes(&self) -> Result<Vec<Song>> {
+    async fn get_likes(&mut self) -> Result<Vec<Song>> {
         let url = format!(
             "{}/v1/users/{}/favorites/tracks",
             Self::API_URL,

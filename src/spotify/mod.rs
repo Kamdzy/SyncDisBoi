@@ -337,7 +337,7 @@ impl MusicApi for SpotifyApi {
         &self.country_code
     }
 
-    async fn create_playlist(&self, name: &str, public: bool) -> Result<Playlist> {
+    async fn create_playlist(&mut self, name: &str, public: bool) -> Result<Playlist> {
         let path = "/me/playlists";
         let body = json!({
             "name": name,
@@ -351,7 +351,7 @@ impl MusicApi for SpotifyApi {
         Ok(playlist)
     }
 
-    async fn get_playlists_info(&self) -> Result<Vec<Playlist>> {
+    async fn get_playlists_info(&mut self) -> Result<Vec<Playlist>> {
         let path = "/me/playlists";
         let res: SpotifyPageResponse<SpotifyPlaylistResponse> = self
             .paginated_request(path, HttpMethod::Get(&[]), 50)
@@ -360,7 +360,7 @@ impl MusicApi for SpotifyApi {
         Ok(playlists.0)
     }
 
-    async fn get_playlist_songs(&self, id: &str) -> Result<Vec<Song>> {
+    async fn get_playlist_songs(&mut self, id: &str) -> Result<Vec<Song>> {
         let path = format!("/playlists/{}/tracks", id);
         let res: SpotifyPageResponse<SpotifySongItemResponse> = self
             .paginated_request(&path, HttpMethod::Get(&[]), 50)
@@ -369,7 +369,7 @@ impl MusicApi for SpotifyApi {
         Ok(songs.0)
     }
 
-    async fn add_songs_to_playlist(&self, playlist: &mut Playlist, songs: &[Song]) -> Result<()> {
+    async fn add_songs_to_playlist(&mut self, playlist: &mut Playlist, songs: &[Song]) -> Result<()> {
         for song in songs {
             playlist.songs.push(song.clone());
         }
@@ -392,7 +392,7 @@ impl MusicApi for SpotifyApi {
     }
 
     async fn remove_songs_from_playlist(
-        &self,
+        &mut self,
         playlist: &mut Playlist,
         songs: &[Song],
     ) -> Result<()> {
@@ -416,7 +416,7 @@ impl MusicApi for SpotifyApi {
         Ok(())
     }
 
-    async fn delete_playlist(&self, playlist: Playlist) -> Result<()> {
+    async fn delete_playlist(&mut self, playlist: Playlist) -> Result<()> {
         let path = format!("/playlists/{}/followers", playlist.id);
         let body = json!({
             "playlist_id": playlist.id,
@@ -426,7 +426,7 @@ impl MusicApi for SpotifyApi {
         Ok(())
     }
 
-    async fn search_song(&self, song: &Song) -> Result<Option<Song>> {
+    async fn search_song(&mut self, song: &Song) -> Result<Option<Song>> {
         let path = "/search";
         let max_len = 100;
         let mut queries = vec![];
@@ -493,7 +493,7 @@ impl MusicApi for SpotifyApi {
         return Ok(None);
     }
 
-    async fn add_like(&self, songs: &[Song]) -> Result<()> {
+    async fn add_like(&mut self, songs: &[Song]) -> Result<()> {
         // NOTE: A maximum of 50 items can be specified in one request
         for songs_chunk in songs.chunks(50) {
             let ids: Vec<&str> = songs_chunk.iter().map(|s| s.id.as_str()).collect();
@@ -506,7 +506,7 @@ impl MusicApi for SpotifyApi {
         Ok(())
     }
 
-    async fn get_likes(&self) -> Result<Vec<Song>> {
+    async fn get_likes(&mut self) -> Result<Vec<Song>> {
         let res: SpotifyPageResponse<SpotifySongItemResponse> = self
             .paginated_request("/me/tracks", HttpMethod::Get(&[]), 50)
             .await?;

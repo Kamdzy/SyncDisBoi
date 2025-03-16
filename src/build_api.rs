@@ -30,7 +30,14 @@ macro_rules! impl_build_api {
                         ..
                     } => {
                         if let Some(headers) = headers {
-                            Box::new(YtMusicApi::new_headers(headers, args.config.clone()).await?)
+                            let Some(client_id) = client_id else {
+                                return Err(eyre!("Missing Youtube Music client_id"));
+                            };
+                            let Some(client_secret) = client_secret else {
+                                return Err(eyre!("Missing Youtube Music client_secret"));
+                            };
+                            let oauth_token_path = config_dir.join("ytmusic_oauth.json");
+                            Box::new(YtMusicApi::new_headers(headers, client_id, client_secret, oauth_token_path, args.config.clone()).await?)
                         } else {
                             let Some(client_id) = client_id else {
                                 return Err(eyre!("Missing Youtube Music client_id"));
