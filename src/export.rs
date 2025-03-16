@@ -5,7 +5,7 @@ use tracing::info;
 
 use crate::music_api::DynMusicApi;
 
-pub async fn export(src_api: DynMusicApi, path: &Path, minify: bool) -> Result<()> {
+pub async fn export(mut src_api: DynMusicApi, path: &Path, minify: bool) -> Result<()> {
     info!("retrieving playlists...");
     let src_playlists = src_api.get_playlists_full().await?;
 

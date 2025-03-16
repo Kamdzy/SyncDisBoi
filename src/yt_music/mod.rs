@@ -15,6 +15,7 @@ use model::{YtMusicAddLikeResponse, YtMusicOAuthDeviceRes};
 use reqwest::header::{HeaderMap, HeaderName};
 use serde::de::DeserializeOwned;
 use serde_json::json;
+use tokio::time::Instant;
 use tracing::{debug, info};
 
 use self::model::{YtMusicContinuationResponse, YtMusicPlaylistEditResponse, YtMusicResponse};
@@ -39,6 +40,10 @@ static CONTEXT: LazyLock<serde_json::Value> = LazyLock::new(|| {
 
 pub struct YtMusicApi {
     client: reqwest::Client,
+    client_id: String,
+    client_secret: String,
+    oauth_token_path: PathBuf,
+    last_token_refresh: Instant,
     config: ConfigArgs,
 }
 
@@ -93,7 +98,7 @@ impl YtMusicApi {
         }
         let client = client.build()?;
 
-        Ok(YtMusicApi { client, config })
+        Ok(YtMusicApi { client, client_id: client_id.to_string(), client_secret: client_secret.to_string(), oauth_token_path, config, last_token_refresh: Instant::now() })
     }
 
     async fn refresh_token(
@@ -168,7 +173,7 @@ impl YtMusicApi {
         Ok(token)
     }
 
-    pub async fn new_headers(headers: &PathBuf, config: ConfigArgs) -> Result<Self> {
+    pub async fn new_headers(headers: &PathBuf, client_id: &str, client_secret: &str, oauth_token_path: PathBuf, config: ConfigArgs) -> Result<Self> {
         let header_data = std::fs::read_to_string(headers)?;
         let header_json: serde_json::Map<String, serde_json::Value> =
             serde_json::from_str(&header_data)?;
@@ -196,7 +201,7 @@ impl YtMusicApi {
 
         let client = client.build().unwrap();
 
-        Ok(YtMusicApi { client, config })
+        Ok(YtMusicApi { client, client_id: client_id.to_string(), client_secret: client_secret.to_string(), oauth_token_path, last_token_refresh: Instant::now(), config })
     }
 
     fn build_endpoint(&self, path: &str, ctoken: Option<&str>) -> String {
@@ -217,7 +222,7 @@ impl YtMusicApi {
     }
 
     async fn paginated_request(
-        &self,
+        &mut self,
         path: &str,
         body: &serde_json::Value,
     ) -> Result<YtMusicResponse> {
@@ -233,8 +238,10 @@ impl YtMusicApi {
         Ok(response)
     }
 
+    
+
     async fn make_request<T>(
-        &self,
+        &mut self,
         path: &str,
         body: &serde_json::Value,
         ctoken: Option<&str>,
@@ -242,6 +249,12 @@ impl YtMusicApi {
     where
         T: DeserializeOwned + std::fmt::Debug,
     {
+        // Refresh the token if more than 5 minutes have passed
+        if self.last_token_refresh.elapsed() > Duration::from_secs(300) {
+            info!("Refreshing token");
+            self.update_refresh_token().await?;
+        }
+
         let body = self.add_context(body);
         let endpoint = self.build_endpoint(path, ctoken);
 
@@ -270,6 +283,52 @@ impl YtMusicApi {
         }
         id.to_string()
     }
+
+    async fn update_refresh_token(&mut self) -> Result<()> {
+        let client_id = &self.client_id;
+        let client_secret = &self.client_secret;
+        let oauth_token_path = &self.oauth_token_path;
+
+        let reader = std::fs::File::open(oauth_token_path)?;
+        let mut oauth_token: OAuthToken = serde_json::from_reader(reader)?;
+
+        let params = json!({
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "grant_type": "refresh_token",
+            "refresh_token": &oauth_token.refresh_token,
+        });
+        let res = self.client
+            .post(Self::OAUTH_TOKEN_URL)
+            .form(&params)
+            .send()
+            .await?;
+        let res = res.error_for_status()?;
+        let refresh_token: OAuthRefreshToken = res.json().await?;
+        oauth_token.access_token = refresh_token.access_token;
+        oauth_token.expires_in = refresh_token.expires_in;
+
+        // Write new token
+        let mut file = std::fs::File::create(oauth_token_path)?;
+        serde_json::to_writer(&mut file, &oauth_token)?;
+
+        // Update the authorization header
+        let mut headers = HeaderMap::new();
+        headers.insert("User-Agent", Self::OAUTH_USER_AGENT.parse()?);
+        headers.insert("Cookie", "SOCS=CAI".parse()?);
+        headers.insert(
+            "Authorization",
+            format!("Bearer {}", oauth_token.access_token).parse()?,
+        );
+        self.client = reqwest::Client::builder()
+            .default_headers(headers)
+            .build()?;
+
+        // Update the last token refresh time
+        self.last_token_refresh = Instant::now();
+
+        Ok(())
+    }
 }
 
 #[async_trait]
@@ -283,7 +342,7 @@ impl MusicApi for YtMusicApi {
         "UNKNOWN"
     }
 
-    async fn create_playlist(&self, name: &str, public: bool) -> Result<Playlist> {
+    async fn create_playlist(&mut self, name: &str, public: bool) -> Result<Playlist> {
         let privacy_status = match public {
             true => "PUBLIC",
             false => "PRIVATE",
@@ -304,7 +363,7 @@ impl MusicApi for YtMusicApi {
         })
     }
 
-    async fn get_playlists_info(&self) -> Result<Vec<Playlist>> {
+    async fn get_playlists_info(&mut self) -> Result<Vec<Playlist>> {
         let browse_id = "FEmusic_liked_playlists";
         let body = json!({ "browseId": browse_id });
         let response = self.paginated_request("browse", &body).await?;
@@ -312,7 +371,7 @@ impl MusicApi for YtMusicApi {
         Ok(playlists.0)
     }
 
-    async fn get_playlist_songs(&self, id: &str) -> Result<Vec<Song>> {
+    async fn get_playlist_songs(&mut self, id: &str) -> Result<Vec<Song>> {
         let browse_id = if id.starts_with("VL") {
             id.to_string()
         } else {
@@ -325,7 +384,7 @@ impl MusicApi for YtMusicApi {
         Ok(songs.0)
     }
 
-    async fn add_songs_to_playlist(&self, playlist: &mut Playlist, songs: &[Song]) -> Result<()> {
+    async fn add_songs_to_playlist(&mut self, playlist: &mut Playlist, songs: &[Song]) -> Result<()> {
         for song in songs {
             playlist.songs.push(song.clone());
         }
@@ -403,7 +462,7 @@ impl MusicApi for YtMusicApi {
     }
 
     async fn remove_songs_from_playlist(
-        &self,
+        &mut self,
         playlist: &mut Playlist,
         songs: &[Song],
     ) -> Result<()> {
@@ -433,7 +492,7 @@ impl MusicApi for YtMusicApi {
         }
     }
 
-    async fn delete_playlist(&self, playlist: Playlist) -> Result<()> {
+    async fn delete_playlist(&mut self, playlist: Playlist) -> Result<()> {
         let body = json!({
             "playlistId": playlist.id,
         });
@@ -442,7 +501,7 @@ impl MusicApi for YtMusicApi {
         Ok(())
     }
 
-    async fn search_song(&self, song: &Song) -> Result<Option<Song>> {
+    async fn search_song(&mut self, song: &Song) -> Result<Option<Song>> {
         debug!(
             "Searching for song: {} by {}",
             song.name,
@@ -485,7 +544,7 @@ impl MusicApi for YtMusicApi {
         Ok(None)
     }
 
-    async fn add_like(&self, songs: &[Song]) -> Result<()> {
+    async fn add_like(&mut self, songs: &[Song]) -> Result<()> {
         // TODO: find a way to bulk-like
         for song in songs {
             let body = json!({
@@ -498,7 +557,7 @@ impl MusicApi for YtMusicApi {
         Ok(())
     }
 
-    async fn get_likes(&self) -> Result<Vec<Song>> {
+    async fn get_likes(&mut self) -> Result<Vec<Song>> {
         let songs = self.get_playlist_songs("LM").await?;
         Ok(songs)
     }

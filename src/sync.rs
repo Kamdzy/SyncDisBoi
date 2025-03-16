@@ -25,8 +25,8 @@ const SKIPPED_PLAYLISTS: [&str; 11] = [
 ];
 
 pub async fn synchronize(
-    src_api: DynMusicApi,
-    dst_api: DynMusicApi,
+    mut src_api: DynMusicApi,
+    mut dst_api: DynMusicApi,
     config: ConfigArgs,
     skip_playlists: Vec<String>,
     _src_owner: String,
