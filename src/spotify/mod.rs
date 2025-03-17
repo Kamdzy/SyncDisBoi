@@ -277,8 +277,12 @@ impl SpotifyApi {
                         self.api_rate_wait(&res).await?;
                         // Retry request
                         return self.make_request(path, method, limit, offset).await;
+                    } else if res.status().is_server_error() {
+                        warn!("Server error (attempt {}): {}. Retrying...", attempt + 1, res.status());
+                        tokio::time::sleep(Duration::from_secs(1)).await;
+                        continue;
                     }
-                    let res = res.error_for_status()?;
+                    let res: Response = res.error_for_status()?;
                     if res.status() != StatusCode::OK && res.status() != StatusCode::CREATED {
                         return Err(eyre!("Invalid response: {}", res.text().await?));
                     }
