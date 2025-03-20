@@ -8,7 +8,7 @@ use crate::utils::dedup_songs;
 use crate::ConfigArgs;
 
 // TODO: Parse playlist owner to ignore platform-specific playlists?
-const SKIPPED_PLAYLISTS: [&str; 11] = [
+const SKIPPED_PLAYLISTS: [&str; 12] = [
     // Yt Music specific
     "New playlist",
     "Your Likes",
@@ -16,6 +16,7 @@ const SKIPPED_PLAYLISTS: [&str; 11] = [
     "Discover Mix",
     "Episodes for Later",
     "New Release Mix",
+    "Archive Mix",
     // Spotify specific
     "Liked Songs",
     "Discover Weekly",
