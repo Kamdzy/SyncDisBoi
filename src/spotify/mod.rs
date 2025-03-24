@@ -281,6 +281,10 @@ impl SpotifyApi {
                         warn!("Server error (attempt {}): {}. Retrying...", attempt + 1, res.status());
                         tokio::time::sleep(Duration::from_secs(1)).await;
                         continue;
+                    } else if res.status() == StatusCode::UNAUTHORIZED {
+                        warn!("Unauthorized (attempt {}): {}. Retrying...", attempt + 1, res.status());
+                        tokio::time::sleep(Duration::from_secs(1)).await;
+                        continue;
                     }
                     let res: Response = res.error_for_status()?;
                     if res.status() != StatusCode::OK && res.status() != StatusCode::CREATED {
