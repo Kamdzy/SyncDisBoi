@@ -149,7 +149,7 @@ impl PlexApi {
 
         // Remove invalid trailing characters from encoded query
         // This causes a crash in Plex search
-        let encoded = encoded.trim_end_matches("%2F").trim_end_matches("%3F").to_string();
+        let encoded = encoded.trim_end_matches("%2F").trim_end_matches("%3F").to_string().replace("%29", "");
 
 
         Ok(encoded)
