@@ -110,7 +110,7 @@ impl TryInto<Song> for SpotifySongResponse {
             .filter(|a| a.id.is_some())
             .map(|i| Artist {
                 id: Some(i.id.unwrap()),
-                name: i.name,
+                name: i.name.unwrap_or_default(),
             })
             .collect();
         let album = Album {

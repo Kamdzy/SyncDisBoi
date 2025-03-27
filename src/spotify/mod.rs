@@ -373,7 +373,28 @@ impl MusicApi for SpotifyApi {
         let res: SpotifyPageResponse<SpotifySongItemResponse> = self
             .paginated_request(&path, HttpMethod::Get(&[]), 50)
             .await?;
-        let songs: Songs = res.try_into()?;
+
+        // Filter out the podcast episodes by only keeping songs if their artists' type is always 'artist'
+        let filtered_items: Vec<SpotifySongItemResponse> = res
+            .items
+            .into_iter()
+            .filter(|item| {
+                if let Some(track) = &item.track {
+                    track.artists.iter().all(|artist| artist.r#type == "artist")
+                } else {
+                    false // Exclude items where `track` is `None`
+                }
+            })
+            .collect();
+
+        // Convert the filtered items into `Songs`
+        let filtered_res = SpotifyPageResponse {
+            items: filtered_items,
+            ..res
+        };
+
+        let songs: Songs = filtered_res.try_into()?;
+        
         Ok(songs.0)
     }
 

@@ -81,7 +81,8 @@ pub struct SpotifySongResponse {
 pub struct SpotifyArtistResponse {
     // id can be null if the song is a local import
     pub id: Option<String>,
-    pub name: String,
+    pub name: Option<String>,
+    pub r#type: String,
 }
 
 #[derive(Deserialize, Debug)]
