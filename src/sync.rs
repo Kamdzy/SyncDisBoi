@@ -141,8 +141,9 @@ pub async fn synchronize(
                 unsafe {
                     SONG_COUNTER += 1;
                     if SONG_COUNTER % 300 == 0 {
-                        info!("Reached 300 songs, taking a {}-second break...", SLEEP_DURATION);
-                        sleep(Duration::from_secs(SLEEP_DURATION)).await;
+                        let sleep_duration = SLEEP_DURATION;
+                        info!("Reached 300 songs, taking a {}-second break...", sleep_duration);
+                        sleep(Duration::from_secs(sleep_duration)).await;
                         SLEEP_DURATION += 60; // Add 60 seconds to the sleep duration each time
                     }
                 }
