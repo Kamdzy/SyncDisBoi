@@ -1,11 +1,11 @@
-use color_eyre::eyre::{eyre, Result};
+use color_eyre::eyre::{Result, eyre};
 use serde_json::json;
 use tokio::time::{sleep, Duration};
 use tracing::{debug, info, warn};
 
+use crate::ConfigArgs;
 use crate::music_api::{DynMusicApi, MusicApiType, Song};
 use crate::utils::dedup_songs;
-use crate::ConfigArgs;
 
 // TODO: Parse playlist owner to ignore platform-specific playlists?
 const SKIPPED_PLAYLISTS: [&str; 12] = [
@@ -47,6 +47,10 @@ pub async fn synchronize(
             src_api.country_code(),
             dst_api.country_code()
         ));
+    }
+
+    if config.debug {
+        std::fs::create_dir_all("debug")?;
     }
 
     info!("retrieving playlists...");
@@ -216,7 +220,7 @@ pub async fn synchronize(
                     .filter(|s| !dst_likes.contains(s))
                     .cloned()
                     .collect::<Vec<Song>>();
-                dst_api.add_like(&new_likes).await?;
+                dst_api.add_likes(&new_likes).await?;
             }
         }
 
@@ -299,7 +303,9 @@ pub async fn synchronize(
             }
             new_likes.push(song);
         }
-        dst_api.add_like(&new_likes).await?;
+
+        info!("synchronizing {} new likes", new_likes.len());
+        dst_api.add_likes(&new_likes).await?;
     }
 
     info!("Synchronization complete!");

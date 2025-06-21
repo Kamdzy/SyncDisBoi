@@ -10,7 +10,7 @@ use std::thread::sleep;
 use std::time::Duration;
 
 use async_trait::async_trait;
-use color_eyre::eyre::{eyre, Result};
+use color_eyre::eyre::{Result, eyre};
 use model::{YtMusicAddLikeResponse, YtMusicOAuthDeviceRes};
 use reqwest::header::{HeaderMap, HeaderName};
 use serde::de::DeserializeOwned;
@@ -19,13 +19,13 @@ use tokio::time::Instant;
 use tracing::{debug, info};
 
 use self::model::{YtMusicContinuationResponse, YtMusicPlaylistEditResponse, YtMusicResponse};
+use crate::ConfigArgs;
 use crate::music_api::{
-    MusicApi, MusicApiType, OAuthRefreshToken, OAuthToken, Playlist, Playlists, Song, Songs,
-    PLAYLIST_DESC,
+    MusicApi, MusicApiType, OAuthRefreshToken, OAuthToken, PLAYLIST_DESC, Playlist, Playlists,
+    Song, Songs,
 };
 use crate::yt_music::model::{YtMusicPlaylistCreateResponse, YtMusicPlaylistDeleteResponse};
 use crate::yt_music::response::{SearchSongUnique, SearchSongs};
-use crate::ConfigArgs;
 
 static CONTEXT: LazyLock<serde_json::Value> = LazyLock::new(|| {
     json!({
@@ -544,7 +544,7 @@ impl MusicApi for YtMusicApi {
         Ok(None)
     }
 
-    async fn add_like(&mut self, songs: &[Song]) -> Result<()> {
+    async fn add_likes(&self, songs: &[Song]) -> Result<()> {
         // TODO: find a way to bulk-like
         for song in songs {
             let body = json!({
