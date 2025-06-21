@@ -433,7 +433,7 @@ impl MusicApi for TidalApi {
         Ok(None)
     }
 
-    async fn add_likes(&self, songs: &[Song]) -> Result<()> {
+    async fn add_likes(&mut self, songs: &[Song]) -> Result<()> {
         if songs.is_empty() {
             return Ok(());
         }

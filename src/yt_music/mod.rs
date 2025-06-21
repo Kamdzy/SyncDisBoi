@@ -544,7 +544,7 @@ impl MusicApi for YtMusicApi {
         Ok(None)
     }
 
-    async fn add_likes(&self, songs: &[Song]) -> Result<()> {
+    async fn add_likes(&mut self, songs: &[Song]) -> Result<()> {
         // TODO: find a way to bulk-like
         for song in songs {
             let body = json!({

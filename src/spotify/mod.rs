@@ -42,8 +42,8 @@ enum HttpMethod<'a> {
 
 impl SpotifyApi {
     const BASE_API: &'static str = "https://api.spotify.com/v1";
-    const REDIRECT_URI_HOST: &'static str = "127.0.0.1:8888";
-    const REDIRECT_URI_URL: &'static str = "http://127.0.0.1:8888/callback";
+    // const REDIRECT_URI_HOST: &'static str = "127.0.0.1:8888";
+    // const REDIRECT_URI_URL: &'static str = "http://127.0.0.1:8888/callback";
     const TOKEN_URL: &'static str = "https://accounts.spotify.com/api/token";
     const SCOPES: &'static [&'static str] = &[
         "user-read-email",
@@ -524,7 +524,7 @@ impl MusicApi for SpotifyApi {
         return Ok(None);
     }
 
-    async fn add_likes(&self, songs: &[Song]) -> Result<()> {
+    async fn add_likes(&mut self, songs: &[Song]) -> Result<()> {
         // NOTE: A maximum of 50 items can be specified in one request
         for songs_chunk in songs.chunks(50) {
             let ids: Vec<&str> = songs_chunk.iter().map(|s| s.id.as_str()).collect();

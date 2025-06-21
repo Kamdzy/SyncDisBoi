@@ -365,7 +365,7 @@ impl MusicApi for PlexApi {
         Ok(None)
     }
 
-    async fn add_like(&mut self, _songs: &[Song]) -> Result<()> {
+    async fn add_likes(&mut self, _songs: &[Song]) -> Result<()> {
         Ok(())
         // todo!()
     }
