@@ -200,10 +200,12 @@ impl SpotifyApi {
             return Err(eyre!("Invalid spotify server callback"));
         }
         let url = format!("{}{}", bind_address, splits[1]);
+        // HACK: dummy url to parse the code query param
+        // let url = format!("http://localhost{}", splits[1]);
         let auth_code = reqwest::Url::parse(&url)?
             .query_pairs()
             .find(|pair| pair.0 == "code")
-            .ok_or(eyre!("Spotify server returned no autorization code"))?
+            .ok_or(eyre!("Spotify server returned no authorization code"))?
             .1
             .to_string();
 
