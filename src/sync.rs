@@ -187,9 +187,9 @@ pub async fn synchronize_playlists(
             if dst_api.api_type() == MusicApiType::YtMusic {
                 unsafe {
                     SONG_COUNTER += 1;
-                    if SONG_COUNTER % 200 == 0 {
+                    if SONG_COUNTER % 150 == 0 {
                         let sleep_duration = SLEEP_DURATION;
-                        info!("Reached 200 songs, taking a {}-second break...", sleep_duration);
+                        info!("Reached 150 songs, taking a {}-second break...", sleep_duration);
                         sleep(Duration::from_secs(sleep_duration)).await;
                         SLEEP_DURATION += 60; // Add 60 seconds to the sleep duration each time
                     }
