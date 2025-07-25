@@ -156,6 +156,7 @@ impl MusicPlatformDst {
             Self::Tidal { owner, .. } => owner,
             Self::Plex { owner, .. } => owner,
             MusicPlatformDst::Export { .. } => "", // Export does not have an owner field
+            MusicPlatformDst::Import {  .. } => ""
         }
     }
 }
