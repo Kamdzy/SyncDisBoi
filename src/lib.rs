@@ -34,7 +34,7 @@ pub struct ConfigArgs {
     pub diff_country: bool,
 
     /// Proxy to use for all requests in the format http://<ip>:<port>
-    #[arg(long)]
+    #[arg(long, env = "PROXY")]
     pub proxy: Option<String>,
 
     /// Optionally replace the config directory
