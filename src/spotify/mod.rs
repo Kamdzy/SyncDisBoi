@@ -199,9 +199,9 @@ impl SpotifyApi {
         if splits.len() <= 1 {
             return Err(eyre!("Invalid spotify server callback"));
         }
-        let url = format!("{}{}", bind_address, splits[1]);
+        // let url = format!("{}{}", bind_address, splits[1]);
         // HACK: dummy url to parse the code query param
-        // let url = format!("http://localhost{}", splits[1]);
+        let url = format!("http://localhost{}", splits[1]);
         let auth_code = reqwest::Url::parse(&url)?
             .query_pairs()
             .find(|pair| pair.0 == "code")

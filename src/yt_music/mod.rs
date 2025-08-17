@@ -8,6 +8,7 @@ use std::path::PathBuf;
 use std::sync::LazyLock;
 use std::thread::sleep;
 use std::time::Duration;
+use atty::Stream;
 
 use async_trait::async_trait;
 use color_eyre::eyre::{Result, eyre};
@@ -155,7 +156,17 @@ impl YtMusicApi {
         } else {
             info!("Please authorize the app in your browser and press enter");
         }
-        std::io::stdin().read_exact(&mut [0])?;
+
+        if atty::is(Stream::Stdin) {
+            // Interactive: wait for user input
+            std::io::stdin().read_exact(&mut [0])?;
+        } else {
+            for i in (0..60).step_by(5) {
+                info!("Waiting for user authorization... {} seconds remaining", 60 - i);
+                sleep(Duration::from_secs(5));
+            }
+            info!("Countdown finished. Proceeding with next steps.");
+        }
 
         // 2. request the token
         let mut params = HashMap::new();
