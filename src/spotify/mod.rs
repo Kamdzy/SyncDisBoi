@@ -30,6 +30,9 @@ pub struct SpotifyApi {
     client: reqwest::Client,
     config: ConfigArgs,
     country_code: String,
+    client_id: String,
+    client_secret: String,
+    oauth_token_path: PathBuf,
 }
 
 #[derive(Debug)]
@@ -102,7 +105,10 @@ impl SpotifyApi {
         Ok(Self {
             client,
             config,
-            country_code
+            country_code,
+            client_id: client_id.to_string(),
+            client_secret: client_secret.to_string(),
+            oauth_token_path,
         })
     }
 
@@ -220,7 +226,7 @@ impl SpotifyApi {
     }
 
     async fn paginated_request<T>(
-        &self,
+        &mut self,
         path: &str,
         method: HttpMethod<'_>,
         limit: usize,
@@ -255,7 +261,7 @@ impl SpotifyApi {
 
     #[async_recursion]
     async fn make_request(
-        &self,
+        &mut self,
         path: &str,
         method: &HttpMethod<'_>,
         limit: usize,
@@ -286,7 +292,28 @@ impl SpotifyApi {
                         tokio::time::sleep(Duration::from_secs(1)).await;
                         continue;
                     } else if res.status() == StatusCode::UNAUTHORIZED {
-                        warn!("Unauthorized (attempt {}): {}. Retrying...", attempt + 1, res.status());
+                        warn!("Unauthorized (attempt {}): {}. Refreshing token...", attempt + 1, res.status());
+                        // Refresh token
+                        let new_token = Self::refresh_token(&self.client_id, &self.client_secret, &self.oauth_token_path).await?;
+                        // Save new token
+                        let mut file = std::fs::File::create(&self.oauth_token_path)?;
+                        serde_json::to_writer(&mut file, &new_token)?;
+                        // Update client headers and preserve proxy settings
+                        let bearer = format!("Bearer {}", new_token.access_token);
+                        let mut headers = HeaderMap::new();
+                        headers.insert("authorization", bearer.parse()?);
+                        headers.insert("content-type", "application/json".parse()?);
+
+                        let mut client_builder = reqwest::ClientBuilder::new()
+                            .default_headers(headers)
+                            .cookie_store(true);
+
+                        if let Some(proxy) = &self.config.proxy {
+                            client_builder = client_builder
+                                .proxy(reqwest::Proxy::all(proxy)?)
+                                .danger_accept_invalid_certs(true);
+                        }
+                        self.client = client_builder.build()?;
                         tokio::time::sleep(Duration::from_secs(1)).await;
                         continue;
                     }
@@ -310,7 +337,7 @@ impl SpotifyApi {
     }
 
     async fn make_request_json<T>(
-        &self,
+        &mut self,
         path: &str,
         method: &HttpMethod<'_>,
         limit: usize,
