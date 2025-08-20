@@ -209,8 +209,7 @@ impl YtMusicApi {
                 .proxy(reqwest::Proxy::all(proxy)?)
                 .danger_accept_invalid_certs(true)
         }
-
-        let client = client.build().unwrap();
+        let client = client.build()?;
 
         Ok(YtMusicApi { client, client_id: client_id.to_string(), client_secret: client_secret.to_string(), oauth_token_path, last_token_refresh: Instant::now(), config })
     }
