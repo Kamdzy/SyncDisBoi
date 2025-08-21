@@ -315,6 +315,15 @@ impl SpotifyApi {
                         }
                         self.client = client_builder.build()?;
                         tokio::time::sleep(Duration::from_secs(1)).await;
+                        // Rebuild the request with the new client and retry
+                        let new_endpoint = self.build_endpoint(path);
+                        request = match method {
+                            HttpMethod::Get(p) => self.client.get(new_endpoint).query(p),
+                            HttpMethod::Post(b) => self.client.post(new_endpoint).json(b),
+                            HttpMethod::Put(b) => self.client.put(new_endpoint).json(b),
+                            HttpMethod::Delete(b) => self.client.delete(new_endpoint).json(b),
+                        };
+                        request = request.query(&[("limit", limit), ("offset", offset)]);
                         continue;
                     }
                     let res: Response = res.error_for_status()?;
