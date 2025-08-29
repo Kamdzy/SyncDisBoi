@@ -405,7 +405,27 @@ impl MusicApi for SpotifyApi {
             .paginated_request(path, HttpMethod::Get(&[]), 50)
             .await?;
         let playlists: Playlists = res.try_into()?;
-        Ok(playlists.0)
+        
+        // Deduplicate playlists by ID to handle Spotify API returning duplicates
+        // Spotify's .next item in response leads to us seeing a playlist from the previous response again
+        let mut seen_ids = HashMap::new();
+        let mut deduplicated = Vec::new();
+        let original_count = playlists.0.len();
+        
+        for playlist in &playlists.0 {
+            if let Some(_existing) = seen_ids.get(&playlist.id) {
+                warn!("Duplicate playlist found: \"{}\" (ID: {}), keeping first occurrence", 
+                      playlist.name, playlist.id);
+                continue;
+            }
+            seen_ids.insert(playlist.id.clone(), true);
+            deduplicated.push(playlist.clone());
+        }
+        
+        info!("Fetched {} playlists, {} after deduplication", 
+              original_count, deduplicated.len());
+              
+        Ok(deduplicated)
     }
 
     async fn get_playlist_songs(&mut self, id: &str) -> Result<Vec<Song>> {
@@ -505,7 +525,7 @@ impl MusicApi for SpotifyApi {
         } else {
             let mut track_query = format!("track:\"{}\"", song.clean_name());
             if track_query.len() > max_len {
-                warn!(
+                debug!(
                     "song name is bigger than spotify max search: \"{}\", truncating",
                     track_query
                 );
