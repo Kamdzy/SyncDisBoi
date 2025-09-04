@@ -17,7 +17,7 @@ use reqwest::header::{HeaderMap, HeaderName};
 use serde::de::DeserializeOwned;
 use serde_json::json;
 use tokio::time::Instant;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 use self::model::{YtMusicContinuationResponse, YtMusicPlaylistEditResponse, YtMusicResponse};
 use crate::ConfigArgs;
@@ -378,7 +378,26 @@ impl MusicApi for YtMusicApi {
         let body = json!({ "browseId": browse_id });
         let response = self.paginated_request("browse", &body).await?;
         let playlists: Playlists = response.try_into()?;
-        Ok(playlists.0)
+        
+        // Deduplicate playlists by ID to handle YouTube Music API returning duplicates
+        let mut seen_ids = HashMap::new();
+        let mut deduplicated = Vec::new();
+        let original_count = playlists.0.len();
+        
+        for playlist in &playlists.0 {
+            if let Some(_existing) = seen_ids.get(&playlist.id) {
+                warn!("Duplicate playlist found: \"{}\" (ID: {}), keeping first occurrence", 
+                      playlist.name, playlist.id);
+                continue;
+            }
+            seen_ids.insert(playlist.id.clone(), true);
+            deduplicated.push(playlist.clone());
+        }
+        
+        info!("Fetched {} playlists, {} after deduplication", 
+              original_count, deduplicated.len());
+              
+        Ok(deduplicated)
     }
 
     async fn get_playlist_songs(&mut self, id: &str) -> Result<Vec<Song>> {

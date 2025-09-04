@@ -1,6 +1,7 @@
 mod model;
 mod response;
 
+use std::collections::HashMap;
 use std::io::Read;
 use std::path::PathBuf;
 
@@ -12,7 +13,7 @@ use reqwest::Response;
 use reqwest::header::HeaderMap;
 use serde::de::DeserializeOwned;
 use serde_json::json;
-use tracing::info;
+use tracing::{info, warn};
 
 use self::model::{TidalPageResponse, TidalPlaylistResponse, TidalSongItemResponse};
 use crate::ConfigArgs;
@@ -316,7 +317,26 @@ impl MusicApi for TidalApi {
             .paginated_request(&url, &HttpMethod::Get(&params), 100)
             .await?;
         let playlists: Playlists = res.try_into()?;
-        Ok(playlists.0)
+        
+        // Deduplicate playlists by ID to handle Tidal API returning duplicates
+        let mut seen_ids = HashMap::new();
+        let mut deduplicated = Vec::new();
+        let original_count = playlists.0.len();
+        
+        for playlist in &playlists.0 {
+            if let Some(_existing) = seen_ids.get(&playlist.id) {
+                warn!("Duplicate playlist found: \"{}\" (ID: {}), keeping first occurrence", 
+                      playlist.name, playlist.id);
+                continue;
+            }
+            seen_ids.insert(playlist.id.clone(), true);
+            deduplicated.push(playlist.clone());
+        }
+        
+        info!("Fetched {} playlists, {} after deduplication", 
+              original_count, deduplicated.len());
+              
+        Ok(deduplicated)
     }
 
     async fn get_playlist_songs(&mut self, id: &str) -> Result<Vec<Song>> {

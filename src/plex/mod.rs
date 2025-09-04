@@ -1,8 +1,11 @@
+use std::collections::HashMap;
+
 use async_trait::async_trait;
 use color_eyre::eyre::{eyre, Ok};
 use color_eyre::Result;
 use model::{PlexCreatePlaylistResponse, PlexHubSearchResponse, PlexLibrarySectionsResponse, PlexPlaylist, PlexPlaylistSongsResponse, PlexPlaylistsResponse, PlexSearchTrackResponse, PlexUriResponse, PlexUserResponse, Track};
 use reqwest::header::HeaderMap;
+use tracing::{info, warn};
 use urlencoding::encode;
 
 use crate::music_api::{MusicApi, MusicApiType, Playlist, Playlists, Song, Songs};
@@ -295,7 +298,25 @@ impl MusicApi for PlexApi {
             p
         }).collect();
 
-        Ok(res_playlists)
+        // Deduplicate playlists by ID to handle Plex API returning duplicates
+        let mut seen_ids = HashMap::new();
+        let mut deduplicated = Vec::new();
+        let original_count = res_playlists.len();
+        
+        for playlist in &res_playlists {
+            if let Some(_existing) = seen_ids.get(&playlist.id) {
+                warn!("Duplicate playlist found: \"{}\" (ID: {}), keeping first occurrence", 
+                      playlist.name, playlist.id);
+                continue;
+            }
+            seen_ids.insert(playlist.id.clone(), true);
+            deduplicated.push(playlist.clone());
+        }
+        
+        info!("Fetched {} playlists, {} after deduplication", 
+              original_count, deduplicated.len());
+
+        Ok(deduplicated)
     }
 
     async fn get_playlist_songs(&mut self, id: &str) -> Result<Vec<Song>> {
