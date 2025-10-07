@@ -28,7 +28,7 @@ pub struct RootArgs {
 pub enum MusicPlatformSrc {
     YtMusic {
         /// The path to the headers JSON file
-        #[arg(long)]
+        #[arg(long, env = "YTMUSIC_HEADERS")]
         headers: Option<PathBuf>,
         /// The client ID for the Youtube API application
         #[arg(
@@ -136,7 +136,7 @@ pub enum MusicPlatformSrc {
 pub enum MusicPlatformDst {
     YtMusic {
         /// The path to the headers JSON file
-        #[arg(long)]
+        #[arg(long, env = "YTMUSIC_HEADERS")]
         headers: Option<PathBuf>,
         /// The client ID for the Youtube API application
         #[arg(
