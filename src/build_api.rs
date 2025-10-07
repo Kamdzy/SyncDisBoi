@@ -30,20 +30,15 @@ macro_rules! impl_build_api {
                         ..
                     } => {
                         if let Some(headers) = headers {
-                            let Some(client_id) = client_id else {
-                                return Err(eyre!("Missing Youtube Music client_id"));
-                            };
-                            let Some(client_secret) = client_secret else {
-                                return Err(eyre!("Missing Youtube Music client_secret"));
-                            };
-                            let oauth_token_path = config_dir.join("ytmusic_oauth.json");
-                            Box::new(YtMusicApi::new_headers(headers, client_id, client_secret, oauth_token_path, args.config.clone()).await?)
+                            // Browser authentication
+                            Box::new(YtMusicApi::new_browser(headers.clone(), args.config.clone()).await?)
                         } else {
+                            // OAuth authentication
                             let Some(client_id) = client_id else {
-                                return Err(eyre!("Missing Youtube Music client_id"));
+                                return Err(eyre!("Missing Youtube Music client_id. Either provide --headers for browser auth or --client-id and --client-secret for OAuth."));
                             };
                             let Some(client_secret) = client_secret else {
-                                return Err(eyre!("Missing Youtube Music client_secret"));
+                                return Err(eyre!("Missing Youtube Music client_secret. Either provide --headers for browser auth or --client-id and --client-secret for OAuth."));
                             };
                             let oauth_token_path = config_dir.join("ytmusic_oauth.json");
                             Box::new(
