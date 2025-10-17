@@ -242,13 +242,6 @@ pub struct TwoColumnBrowseResultsRenderer {
 pub struct SecondaryContents {
     pub section_list_renderer: Option<SectionListRenderer>,
 }
-
-#[derive(Deserialize, Debug)]
-#[serde(rename_all = "camelCase")]
-pub struct SectionListRenderer {
-    pub contents: Option<Vec<SectionRendererContent>>,
-    pub continuations: Option<[Continuation; 1]>,
-}
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct SingleColumnBrowseResultsRenderer {
@@ -263,6 +256,12 @@ pub struct Tab {
 #[serde(rename_all = "camelCase")]
 pub struct TabRendererContent {
     pub section_list_renderer: ContentsVec<SectionRendererContent>,
+}
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct SectionListRenderer {
+    pub contents: Option<Vec<SectionRendererContent>>,
+    pub continuations: Option<[Continuation; 1]>,
 }
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -292,28 +291,11 @@ pub struct MusicPlaylistShelfRendererContent {
     pub continuation_item_renderer: Option<ContinuationItemRenderer>,
 }
 
-#[derive(Deserialize, Debug)]
-#[serde(rename_all = "camelCase")]
-pub struct ContinuationItemRenderer {
-    pub continuation_endpoint: ContinuationEndpoint,
-}
-
-#[derive(Deserialize, Debug)]
-#[serde(rename_all = "camelCase")]
-pub struct ContinuationEndpoint {
-    pub continuation_command: ContinuationCommand,
-}
 impl ContinuationEndpoint {
     pub fn get_continuation(&self) -> String {
         self.continuation_command.token.clone()
     }
 }
-#[derive(Deserialize, Debug)]
-#[serde(rename_all = "camelCase")]
-pub struct ContinuationCommand {
-    pub token: String,
-}
-
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct MusicResponsiveListItemRenderer {
@@ -423,6 +405,21 @@ impl MusicTwoRowItemRenderer {
     pub fn get_owner(&self) -> Option<String> {
         Some(self.subtitle.as_ref()?.runs.as_ref()?.first()?.get_text())
     }
+}
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct ContinuationItemRenderer {
+    pub continuation_endpoint: ContinuationEndpoint,
+}
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct ContinuationEndpoint {
+    pub continuation_command: ContinuationCommand,
+}
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct ContinuationCommand {
+    pub token: String,
 }
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -742,5 +739,5 @@ pub struct YtMusicAddLikeResponse {
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct YtMusicResponseContext {
-    pub visitor_data: String,
+    // pub visitor_data: String,
 }
