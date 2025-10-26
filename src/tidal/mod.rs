@@ -44,6 +44,7 @@ impl TidalApi {
     const AUTH_URL: &'static str = "https://auth.tidal.com/v1/oauth2/device_authorization";
     const TOKEN_URL: &'static str = "https://auth.tidal.com/v1/oauth2/token";
     const SCOPE: &'static str = "r_usr w_usr w_sub";
+    const RES_DEBUG_FILE: &'static str = "debug/tidal_last_res.json";
 
     pub async fn new(
         client_id: &str,
@@ -54,10 +55,10 @@ impl TidalApi {
     ) -> Result<Self> {
         let token = if !oauth_token_path.exists() || clear_cache {
             info!("requesting new token");
-            Self::request_token(client_id, client_secret, config.debug).await?
+            Self::request_token(client_id, client_secret, &config).await?
         } else {
             info!("refreshing token");
-            Self::refresh_token(client_id, client_secret, &oauth_token_path, config.debug).await?
+            Self::refresh_token(client_id, client_secret, &oauth_token_path, &config).await?
         };
         // Write new token
         let mut file = std::fs::File::create(&oauth_token_path)?;
@@ -81,14 +82,12 @@ impl TidalApi {
         let client = client.build()?;
 
         let url = format!("{}/users/me", Self::API_V2_URL);
-        let me_res: TidalMediaResponseSingle = Self::make_request_json_internal(
-            &client,
-            &url,
-            &HttpMethod::Get(&json!({})),
-            None,
-            config.debug,
-        )
-        .await?;
+        let res = client.get(&url).send().await?;
+        let status = res.status();
+        let me_res: TidalMediaResponseSingle = Self::debug_response_json(&config, res).await?;
+        if !status.is_success() {
+            return Err(eyre!("Invalid HTTP status: {}", status));
+        }
         let country_code = me_res.data.attributes.country.unwrap_or("US".into());
 
         Ok(Self {
@@ -102,22 +101,19 @@ impl TidalApi {
     async fn request_token(
         client_id: &str,
         client_secret: &str,
-        debug: bool,
+        config: &ConfigArgs,
     ) -> Result<OAuthToken> {
         let client = reqwest::Client::new();
         let params = json!({
             "client_id": client_id,
             "scope": Self::SCOPE,
         });
-
-        let device_res: TidalOAuthDeviceRes = Self::make_request_json_internal(
-            &client,
-            Self::AUTH_URL,
-            &HttpMethod::Post(&params),
-            None,
-            debug,
-        )
-        .await?;
+        let res = client.post(Self::AUTH_URL).form(&params).send().await?;
+        let status = res.status();
+        let device_res: TidalOAuthDeviceRes = Self::debug_response_json(config, res).await?;
+        if !status.is_success() {
+            return Err(eyre!("Invalid HTTP status: {}", status));
+        }
 
         let url = format!("https://{}", device_res.verification_uri_complete);
 
@@ -141,8 +137,11 @@ impl TidalApi {
             .form(&auth_token)
             .send()
             .await?;
-        // TODO: move to Self::make_request_json_internal, the basic_auth is the problem
-        let token: OAuthToken = res.json().await?;
+        let status = res.status();
+        let token: OAuthToken = Self::debug_response_json(config, res).await?;
+        if !status.is_success() {
+            return Err(eyre!("Invalid HTTP status: {}", status));
+        }
 
         Ok(token)
     }
@@ -151,7 +150,7 @@ impl TidalApi {
         client_id: &str,
         client_secret: &str,
         oauth_token_path: &PathBuf,
-        debug: bool,
+        config: &ConfigArgs,
     ) -> Result<OAuthToken> {
         let client = reqwest::Client::new();
         let reader = std::fs::File::open(oauth_token_path)?;
@@ -163,14 +162,13 @@ impl TidalApi {
             "grant_type": "refresh_token",
             "refresh_token": &oauth_token.refresh_token,
         });
-        let refresh_token: OAuthRefreshToken = Self::make_request_json_internal(
-            &client,
-            Self::TOKEN_URL,
-            &HttpMethod::Post(&params),
-            None,
-            debug,
-        )
-        .await?;
+
+        let res = client.post(Self::TOKEN_URL).form(&params).send().await?;
+        let status = res.status();
+        let refresh_token: OAuthRefreshToken = Self::debug_response_json(config, res).await?;
+        if !status.is_success() {
+            return Err(eyre!("Invalid HTTP status: {}", status));
+        }
 
         oauth_token.access_token = refresh_token.access_token;
         oauth_token.expires_in = refresh_token.expires_in;
@@ -187,15 +185,18 @@ impl TidalApi {
     where
         T: DeserializeOwned + std::fmt::Debug,
     {
-        let mut res: TidalPageResponse<T> = self.make_request_json(url, method, limit, 0).await?;
+        let mut res: TidalPageResponse<T> = self
+            .make_request_json(url, method, Some((limit, 0)))
+            .await?;
         if res.items.is_empty() {
             return Ok(res);
         }
 
         let mut offset = limit;
         while offset < res.total_number_of_items {
-            let res2: TidalPageResponse<T> =
-                self.make_request_json(url, method, limit, offset).await?;
+            let res2: TidalPageResponse<T> = self
+                .make_request_json(url, method, Some((limit, offset)))
+                .await?;
             if res2.items.is_empty() {
                 break;
             }
@@ -205,73 +206,44 @@ impl TidalApi {
         Ok(res)
     }
 
-    async fn make_request(
-        &self,
-        url: &str,
-        method: &HttpMethod<'_>,
-        lim_off: Option<(usize, usize)>,
-    ) -> Result<Response> {
-        Self::make_request_internal(&self.client, url, method, lim_off).await
-    }
-
     async fn make_request_json<T>(
         &self,
         url: &str,
         method: &HttpMethod<'_>,
-        limit: usize,
-        offset: usize,
+        lim_off: Option<(usize, usize)>,
     ) -> Result<T>
     where
         T: DeserializeOwned,
     {
-        Self::make_request_json_internal(
-            &self.client,
-            url,
-            method,
-            Some((limit, offset)),
-            self.config.debug,
-        )
-        .await
-    }
-
-    async fn make_request_internal(
-        client: &reqwest::Client,
-        url: &str,
-        method: &HttpMethod<'_>,
-        lim_off: Option<(usize, usize)>,
-    ) -> Result<Response> {
         let mut request = match method {
-            HttpMethod::Get(p) => client.get(url).query(p),
-            HttpMethod::Post(b) => client.post(url).form(b),
-            HttpMethod::Put(b) => client.put(url).form(b),
+            HttpMethod::Get(p) => self.client.get(url).query(p),
+            HttpMethod::Post(b) => self.client.post(url).form(b),
+            HttpMethod::Put(b) => self.client.put(url).form(b),
         };
         if let Some((limit, offset)) = lim_off {
             request = request.query(&[("limit", limit), ("offset", offset)]);
         }
+
         let res = request.send().await?;
-        let res = res.error_for_status()?;
-        Ok(res)
+        let status = res.status();
+        let obj = Self::debug_response_json(&self.config, res).await?;
+        if !status.is_success() {
+            return Err(eyre!("Invalid HTTP status: {}", status));
+        }
+        Ok(obj)
     }
 
-    async fn make_request_json_internal<T>(
-        client: &reqwest::Client,
-        url: &str,
-        method: &HttpMethod<'_>,
-        lim_off: Option<(usize, usize)>,
-        debug: bool,
-    ) -> Result<T>
+    async fn debug_response_json<T>(config: &ConfigArgs, res: Response) -> Result<T>
     where
         T: DeserializeOwned,
     {
-        let res = Self::make_request_internal(client, url, method, lim_off).await?;
-        let obj = if debug {
+        Ok(if config.debug {
             let text = res.text().await?;
-            std::fs::write("debug/tidal_last_res.json", &text)?;
+            std::fs::write(Self::RES_DEBUG_FILE, &text)?;
             serde_json::from_str(&text)?
         } else {
             res.json().await?
-        };
-        Ok(obj)
+        })
     }
 }
 
@@ -297,7 +269,7 @@ impl MusicApi for TidalApi {
             "folderId": "root"
         });
         let res: TidalPlaylistCreateResponse = self
-            .make_request_json(&url, &HttpMethod::Put(&params), 0, 5)
+            .make_request_json(&url, &HttpMethod::Put(&params), Some((5, 0)))
             .await?;
 
         Ok(Playlist {
@@ -357,20 +329,21 @@ impl MusicApi for TidalApi {
             return Ok(());
         }
 
+        // 1. query playlist ETag
         let url = format!("{}/v1/playlists/{}", Self::API_URL, playlist.id);
         let params = json!({
             "countryCode": self.country_code,
         });
-        let res = self
-            .make_request(&url, &HttpMethod::Get(&params), None)
-            .await?;
-        let etag = res
-            .headers()
-            .get("ETag")
-            .ok_or(eyre!("No ETag in Tidal Response"))?;
+        let res = self.client.get(&url).query(&params).send().await?;
+        let status = res.status();
+        let etag = res.headers().get("ETag").cloned();
+        let () = Self::debug_response_json(&self.config, res).await?;
+        let etag = etag.ok_or(eyre!("No ETag in Tidal Response"))?;
+        if !status.is_success() {
+            return Err(eyre!("Invalid HTTP status: {}", status));
+        }
 
-        // TODO: accomodate make_request to access request headers + body
-
+        // 2. add songs to playlist
         let url = format!("{}/v1/playlists/{}/items", Self::API_URL, playlist.id);
         let params = json!({
             "trackIds": songs.iter().map(|s| s.id.as_str()).collect::<Vec<_>>().join(","),
@@ -384,7 +357,11 @@ impl MusicApi for TidalApi {
             .form(&params)
             .send()
             .await?;
-        res.error_for_status()?;
+        let status = res.status();
+        let () = Self::debug_response_json(&self.config, res).await?;
+        if !status.is_success() {
+            return Err(eyre!("Invalid HTTP status: {}", status));
+        }
 
         Ok(())
     }
@@ -405,8 +382,8 @@ impl MusicApi for TidalApi {
         let params = json!({
             "trns": format!("trn:playlist:{}", playlist.id),
         });
-        let _res = self
-            .make_request(&url, &HttpMethod::Put(&params), None)
+        let () = self
+            .make_request_json(&url, &HttpMethod::Put(&params), None)
             .await?;
         Ok(())
     }
@@ -420,7 +397,7 @@ impl MusicApi for TidalApi {
                 "filter[isrc]": isrc.to_uppercase(),
             });
             let res: TidalMediaResponse = self
-                .make_request_json(&url, &HttpMethod::Get(&params), 0, 1)
+                .make_request_json(&url, &HttpMethod::Get(&params), Some((1, 0)))
                 .await?;
             if res.data.is_empty() {
                 return Ok(None);
@@ -442,7 +419,7 @@ impl MusicApi for TidalApi {
                 "type": "TRACKS",
             });
             let res: TidalSearchResponse = self
-                .make_request_json(&url, &HttpMethod::Get(&params), 0, 3)
+                .make_request_json(&url, &HttpMethod::Get(&params), Some((3, 0)))
                 .await?;
             let res_songs: Songs = res.try_into()?;
             // iterate over top 3 results
@@ -474,7 +451,8 @@ impl MusicApi for TidalApi {
                 "trackIds": tracks_chunk.join(","),
                 "onArtifactNotFound": "FAIL",
             });
-            self.make_request(&url, &HttpMethod::Post(&params), None)
+            let () = self
+                .make_request_json(&url, &HttpMethod::Post(&params), None)
                 .await?;
         }
         Ok(())
