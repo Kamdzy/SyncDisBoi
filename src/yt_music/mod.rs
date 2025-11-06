@@ -13,7 +13,6 @@ use atty::Stream;
 use async_trait::async_trait;
 use color_eyre::eyre::{Result, eyre};
 use model::{YtMusicAddLikeResponse, YtMusicOAuthDeviceRes};
-use reqwest::Response;
 use reqwest::header::{HeaderMap, HeaderName};
 use serde::de::DeserializeOwned;
 use serde_json::json;
@@ -27,6 +26,7 @@ use crate::music_api::{
     MusicApi, MusicApiType, OAuthRefreshToken, OAuthToken, PLAYLIST_DESC, Playlist, Playlists,
     Song, Songs,
 };
+use crate::utils::debug_response_json;
 use crate::yt_music::model::{YtMusicPlaylistCreateResponse, YtMusicPlaylistDeleteResponse};
 use crate::yt_music::response::{SearchSongUnique, SearchSongs};
 
@@ -71,7 +71,7 @@ impl YtMusicApi {
     const OAUTH_TOKEN_URL: &'static str = "https://oauth2.googleapis.com/token";
     const OAUTH_GRANT_TYPE: &'static str = "http://oauth.net/grant_type/device/1.0";
     const OAUTH_USER_AGENT: &'static str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:88.0) Gecko/20100101 Firefox/88.0 Cobalt/Version";
-    const RES_DEBUG_FILE: &'static str = "debug/yt_music_last_res.json";
+    const RES_DEBUG_FILENAME: &'static str = MusicApiType::YtMusic.short_name();
 
     /// Create a new YtMusicApi instance using browser authentication
     pub async fn new_browser(headers_path: PathBuf, config: ConfigArgs) -> Result<Self> {
@@ -501,7 +501,8 @@ impl YtMusicApi {
             .send()
             .await?;
         let status = res.status();
-        let refresh_token: OAuthRefreshToken = Self::debug_response_json(config, res).await?;
+        let refresh_token: OAuthRefreshToken =
+            debug_response_json(config, res, Self::RES_DEBUG_FILENAME).await?;
         if !status.is_success() {
             return Err(eyre!("Invalid HTTP status: {}", status));
         }
@@ -528,7 +529,8 @@ impl YtMusicApi {
             .send()
             .await?;
         let status = res.status();
-        let oauth_res: YtMusicOAuthDeviceRes = Self::debug_response_json(config, res).await?;
+        let oauth_res: YtMusicOAuthDeviceRes =
+            debug_response_json(config, res, Self::RES_DEBUG_FILENAME).await?;
         if !status.is_success() {
             return Err(eyre!("Invalid HTTP status: {}", status));
         }
@@ -566,7 +568,7 @@ impl YtMusicApi {
             .send()
             .await?;
         let status = res.status();
-        let token: OAuthToken = Self::debug_response_json(config, res).await?;
+        let token: OAuthToken = debug_response_json(config, res, Self::RES_DEBUG_FILENAME).await?;
         if !status.is_success() {
             return Err(eyre!("Invalid HTTP status: {}", status));
         }
@@ -648,7 +650,7 @@ impl YtMusicApi {
         let obj = if self.config.debug {
             let status = res.status();
             let text = res.text().await?;
-            std::fs::write(Self::RES_DEBUG_FILE, &text)?;
+            std::fs::write(Self::RES_DEBUG_FILENAME, &text)?;
             
             // Check for authentication/rate limiting issues
             // YouTube Music can return not-logged-in status in two formats:
@@ -749,19 +751,6 @@ impl YtMusicApi {
         }
         
         Ok(obj)
-    }
-
-    async fn debug_response_json<T>(config: &ConfigArgs, res: Response) -> Result<T>
-    where
-        T: DeserializeOwned,
-    {
-        Ok(if config.debug {
-            let text = res.text().await?;
-            std::fs::write(Self::RES_DEBUG_FILE, &text)?;
-            serde_json::from_str(&text)?
-        } else {
-            res.json().await?
-        })
     }
 
     pub fn clean_playlist_id(id: &str) -> String {

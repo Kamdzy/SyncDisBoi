@@ -25,6 +25,7 @@ use crate::music_api::{
     Song, Songs,
 };
 use crate::spotify::model::SpotifySearchResponse;
+use crate::utils::debug_response_json;
 
 pub struct SpotifyApi {
     client: reqwest::Client,
@@ -59,7 +60,7 @@ impl SpotifyApi {
         "playlist-modify-private",
     ];
     const LISTEN_RESPONSE: &'static str = "HTTP/1.1 200 OK\r\nContent-Length: 56\r\n\r\nAuthorization code received! You may now close this tab.";
-    const RES_DEBUG_FILE: &'static str = "debug/spotify_last_res.json";
+    const RES_DEBUG_FILENAME: &'static str = MusicApiType::Spotify.short_name();
 
     pub async fn new(
         client_id: &str,
@@ -142,7 +143,7 @@ impl SpotifyApi {
             .send()
             .await?;
         let status = res.status();
-        let token = Self::debug_response_json(config, res).await?;
+        let token = debug_response_json(config, res, Self::RES_DEBUG_FILENAME).await?;
         if !status.is_success() {
             return Err(eyre!("Failed to get spotify token: status {}", status,));
         }
@@ -168,7 +169,8 @@ impl SpotifyApi {
 
         let res = client.post(Self::TOKEN_URL).form(&params).send().await?;
         let status = res.status();
-        let refresh_token: OAuthRefreshToken = Self::debug_response_json(config, res).await?;
+        let refresh_token: OAuthRefreshToken =
+            debug_response_json(config, res, Self::RES_DEBUG_FILENAME).await?;
         if !status.is_success() {
             return Err(eyre!("Failed to refresh spotify token: status {}", status));
         }
@@ -345,7 +347,7 @@ impl SpotifyApi {
                         request = request.query(&[("limit", limit), ("offset", offset)]);
                         continue;
                     }
-                    let obj = Self::debug_response_json(&self.config, res).await?;
+                    let obj = debug_response_json(&self.config, res, Self::RES_DEBUG_FILENAME).await?;
                     if status != StatusCode::OK && status != StatusCode::CREATED {
                         return Err(eyre!("Invalid HTTP status: {}", status));
                     }
@@ -362,19 +364,6 @@ impl SpotifyApi {
         }
 
         Err(eyre!("Request failed after {} attempts", retries))
-    }
-
-    async fn debug_response_json<T>(config: &ConfigArgs, res: Response) -> Result<T>
-    where
-        T: DeserializeOwned,
-    {
-        Ok(if config.debug {
-            let text = res.text().await?;
-            std::fs::write(Self::RES_DEBUG_FILE, &text)?;
-            serde_json::from_str(&text)?
-        } else {
-            res.json().await?
-        })
     }
 }
 
