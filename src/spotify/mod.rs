@@ -93,7 +93,7 @@ impl SpotifyApi {
         if let Some(proxy) = &config.proxy {
             client = client
                 .proxy(reqwest::Proxy::all(proxy)?)
-                .danger_accept_invalid_certs(true)
+                .danger_accept_invalid_certs(true);
         }
 
         let client = client.build()?;
@@ -190,7 +190,7 @@ impl SpotifyApi {
         let redirect_uri_url  = format!("http://{}:{}/callback", final_callback_host, callback_port);
         let mut params = HashMap::new();
         params.insert("response_type", "code");
-        let scopes = SpotifyApi::SCOPES.iter().as_slice().join(" ").to_string();
+        let scopes = SpotifyApi::SCOPES.iter().as_slice().join(" ");
         params.insert("scope", &scopes);
         params.insert("client_id", client_id);
         params.insert("redirect_uri", &redirect_uri_url);
@@ -238,7 +238,7 @@ impl SpotifyApi {
         Ok(auth_code)
     }
 
-    fn build_endpoint(&self, path: &str) -> String {
+    fn build_endpoint(path: &str) -> String {
         format!("{}{}", SpotifyApi::BASE_API, path)
     }
 
@@ -287,7 +287,7 @@ impl SpotifyApi {
     where
         T: DeserializeOwned,
     {
-        let endpoint = self.build_endpoint(path);
+        let endpoint = Self::build_endpoint(path);
 
         let mut request = match method {
             HttpMethod::Get(p) => self.client.get(endpoint).query(p),
@@ -337,7 +337,7 @@ impl SpotifyApi {
                         self.client = client_builder.build()?;
                         tokio::time::sleep(Duration::from_secs(1)).await;
                         // Rebuild the request with the new client and retry
-                        let new_endpoint = self.build_endpoint(path);
+                        let new_endpoint = Self::build_endpoint(path);
                         request = match method {
                             HttpMethod::Get(p) => self.client.get(new_endpoint).query(p),
                             HttpMethod::Post(b) => self.client.post(new_endpoint).json(b),

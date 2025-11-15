@@ -126,10 +126,7 @@ impl_build_api!(MusicPlatformDst);
 impl MusicPlatformSrc {
     pub fn get_dst(&self) -> &MusicPlatformDst {
         match self {
-            Self::YtMusic { dst, .. } => dst,
-            Self::Spotify { dst, .. } => dst,
-            Self::Tidal { dst, .. } => dst,
-            Self::Plex { dst, .. } => dst,
+            Self::YtMusic { dst, .. } | Self::Spotify { dst, .. } | Self::Tidal { dst, .. } | Self::Plex { dst, .. } => dst,
         }
     }
 

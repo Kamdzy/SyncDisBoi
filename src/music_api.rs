@@ -22,7 +22,7 @@ pub trait MusicApi {
     async fn get_playlists_full(&mut self) -> Result<Vec<Playlist>> {
         let mut playlists = self.get_playlists_info().await?;
 
-        for playlist in playlists.iter_mut() {
+        for playlist in &mut playlists {
             let songs = self.get_playlist_songs(&playlist.id).await?;
             playlist.songs = songs;
         }
@@ -43,7 +43,7 @@ pub trait MusicApi {
     async fn search_songs(&mut self, songs: &[Song]) -> Result<Vec<Option<Song>>> {
         let mut results = Vec::new();
 
-        for song in songs.iter() {
+        for song in songs {
             results.push(self.search_song(song).await?);
         }
 

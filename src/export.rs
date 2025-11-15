@@ -10,10 +10,10 @@ pub async fn export(mut src_api: DynMusicApi, output: &Path, minify: bool) -> Re
     let src_playlists = src_api.get_playlists_full().await?;
 
     info!("exporting playlists...");
-    if !minify {
-        serde_json::to_writer_pretty(std::fs::File::create(output)?, &src_playlists)?;
-    } else {
+    if minify {
         serde_json::to_writer(std::fs::File::create(output)?, &src_playlists)?;
+    } else {
+        serde_json::to_writer_pretty(std::fs::File::create(output)?, &src_playlists)?;
     }
     info!("successfully exported playlists to: {:?}", output);
 
