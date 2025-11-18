@@ -22,9 +22,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install Nix
-        uses: DeterminateSystems/nix-installer-action@v4
+        uses: DeterminateSystems/nix-installer-action@v21
       - name: Magic Nix Cache
-        uses: DeterminateSystems/magic-nix-cache-action@v2
+        uses: DeterminateSystems/magic-nix-cache-action@v13
       - name: Build ${{ matrix.target }} binary
         run: |
           nix build -L .#${{matrix.target.derivation}}
