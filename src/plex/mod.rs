@@ -153,7 +153,13 @@ impl PlexApi {
         // Remove invalid trailing characters from encoded query
         // This causes a crash in Plex search
         // Manually encode periods to %2E since urlencoding doesn't encode them
-        let encoded = encoded.trim_end_matches("%2F").trim_end_matches("%3F").to_string().replace("%29", "").replace(".", "%2E");
+        let encoded = encoded
+            .trim_end_matches("%2F")
+            .trim_end_matches("%3F")
+            .to_string()
+            .replace("%20%2A", "%20")
+            .replace("%29", "")
+            .replace(".", "%2E");
 
         // Replace 3 or more consecutive encoded periods with just 2
         // Plex crashes on three or more consecutive encoded periods

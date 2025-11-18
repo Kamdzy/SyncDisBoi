@@ -741,16 +741,17 @@ impl YtMusicApi {
             }
             serde_json::from_str(&text)?
         } else {
-            let res = res.error_for_status()?;
-            // Parse as serde_json::Value first to check for auth failures
-            let value: serde_json::Value = res.json().await?;
-            let json_text = value.to_string();
+            // Production mode: capture status and body BEFORE any error checking
+            let status = res.status();
+            let text = res.text().await?;
+            
+            // Check for authentication/rate limiting issues FIRST (before status check)
             let is_not_logged_in = 
                 // Check for direct format
-                json_text.contains(r#""logged_in":"0"#) || json_text.contains(r#""logged_in": "0"#)
+                text.contains(r#""logged_in":"0"#) || text.contains(r#""logged_in": "0"#)
                 // Check for key-value format in serviceTrackingParams
-                || ((json_text.contains(r#""key":"logged_in""#) || json_text.contains(r#""key": "logged_in""#)) 
-                    && (json_text.contains(r#""value":"0""#) || json_text.contains(r#""value": "0""#)));
+                || ((text.contains(r#""key":"logged_in""#) || text.contains(r#""key": "logged_in""#)) 
+                    && (text.contains(r#""value":"0""#) || text.contains(r#""value": "0""#)));
             
             if is_not_logged_in {
                 if matches!(self.auth_type, YtMusicAuthType::Browser { .. }) {
@@ -767,10 +768,59 @@ impl YtMusicApi {
                     ));
                 }
             }
-
-            // Now convert serde_json::Value to T
-            let obj: T = serde_json::from_value(value)?;
-            obj
+            
+            // Check for sign-in prompts
+            if text.contains(r#""text":"Sign in""#) || 
+               (text.contains("signInEndpoint") && text.contains("messageRenderer")) {
+                if matches!(self.auth_type, YtMusicAuthType::Browser { .. }) {
+                    return Err(eyre!(
+                        "YouTube Music is requesting sign-in.\n\
+                        Your browser cookies have expired or are invalid.\n\
+                        Please refresh your headers by running:\n  \
+                        cargo run --example setup_ytmusic_browser"
+                    ));
+                } else {
+                    return Err(eyre!(
+                        "YouTube Music is requesting sign-in.\n\
+                        OAuth authentication needs to be refreshed."
+                    ));
+                }
+            }
+            
+            // Check rate limiting
+            if status.as_u16() == 429 {
+                return Err(eyre!("Rate limit exceeded (429). Please wait before retrying."));
+            }
+            
+            // NOW check for HTTP errors (403, etc.) and save diagnostic data
+            if status.is_client_error() || status.is_server_error() {
+                // Ensure debug directory exists
+                let debug_dir = std::path::Path::new("debug");
+                if !debug_dir.exists() {
+                    let _ = std::fs::create_dir("debug");
+                }
+                
+                // Save diagnostic data with timestamp
+                let timestamp = SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs();
+                let error_file = format!("debug/error_{}_{}.json", status.as_u16(), timestamp);
+                let _ = std::fs::write(&error_file, &text);
+                
+                warn!("HTTP Error {} - Response saved to: {}", status, error_file);
+                return Err(eyre!(
+                    "HTTP Error {}: {}\n\
+                    Diagnostic data saved to: {}\n\
+                    Check this file for detailed error information.",
+                    status, 
+                    text.chars().take(200).collect::<String>(),
+                    error_file
+                ));
+            }
+            
+            // Parse the JSON normally if no errors
+            serde_json::from_str(&text)?
         };
         
         // For browser auth, update cookies from response headers (after parsing JSON)
