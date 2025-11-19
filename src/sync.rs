@@ -92,6 +92,25 @@ pub async fn synchronize_playlists(
     // Filter by playlist owner if we want to sync only our own playlists
     // src_playlists.retain(|playlist| playlist.owner == Some(src_owner.to_string()));
 
+    // Check for skip_playlists entries that don't match any playlists
+    if !skip_playlists.is_empty() {
+        let all_playlist_names: Vec<String> = src_playlists
+            .iter()
+            .chain(dst_playlists.iter())
+            .map(|p| p.name.to_lowercase())
+            .collect();
+        
+        for skipped in &skip_playlists {
+            let skipped_lower = skipped.to_lowercase();
+            if !all_playlist_names.contains(&skipped_lower) {
+                warn!(
+                    "skip_playlists entry \"{}\" does not match any source or destination playlist (consider removing it)",
+                    skipped
+                );
+            }
+        }
+    }
+
     // Remove skipped playlists by matching name lowercase
     src_playlists.retain(|playlist| {
         !skip_playlists
