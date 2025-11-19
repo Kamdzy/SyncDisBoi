@@ -72,6 +72,10 @@ impl YtMusicApi {
     const OAUTH_GRANT_TYPE: &'static str = "http://oauth.net/grant_type/device/1.0";
     const OAUTH_USER_AGENT: &'static str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:88.0) Gecko/20100101 Firefox/88.0 Cobalt/Version";
     const RES_DEBUG_FILENAME: &'static str = MusicApiType::YtMusic.short_name();
+    
+    // Retry configuration for rate limiting
+    const MAX_RETRIES: u32 = 5;  // 6 total attempts (0-5)
+    const MAX_BACKOFF_SECS: u64 = 900;  // Cap exponential backoff at 120 seconds
 
     /// Create a new YtMusicApi instance using browser authentication
     pub async fn new_browser(headers_path: PathBuf, config: ConfigArgs) -> Result<Self> {
@@ -664,20 +668,23 @@ impl YtMusicApi {
         /* Switch to info for dev env */
         debug!("Requesting: {}", endpoint);
 
-        // For browser auth, generate a fresh authorization header with current timestamp
-        let mut request = self.client.post(&endpoint).json(&body);
-        
-        if let YtMusicAuthType::Browser { sapisid, origin, .. } = &self.auth_type {
-            let auth_header = Self::generate_sapisidhash(sapisid, origin);
-            request = request.header("authorization", auth_header);
-        }
-        
-        let res = request.send().await?;
-        
-        // For browser auth, capture and update cookies from response headers
-        let response_headers = res.headers().clone();
-        
-        let obj = if self.config.debug {
+        // Retry loop with exponential backoff for rate limiting
+        let mut retry_count = 0;
+        loop {
+            // For browser auth, generate a fresh authorization header with current timestamp
+            let mut request = self.client.post(&endpoint).json(&body);
+            
+            if let YtMusicAuthType::Browser { sapisid, origin, .. } = &self.auth_type {
+                let auth_header = Self::generate_sapisidhash(sapisid, origin);
+                request = request.header("authorization", auth_header);
+            }
+            
+            let res = request.send().await?;
+            
+            // For browser auth, capture and update cookies from response headers
+            let response_headers = res.headers().clone();
+            
+            let obj = if self.config.debug {
             let status = res.status();
             let text = res.text().await?;
             std::fs::write(Self::RES_DEBUG_FILENAME, &text)?;
@@ -732,8 +739,42 @@ impl YtMusicApi {
                 }
             }
             
-            if status.as_u16() == 429 {
-                return Err(eyre!("Rate limit exceeded (429). Please wait before retrying."));
+            // Detect rate limiting: HTTP 429 or Google's HTML "automated queries" response
+            let is_rate_limited = status.as_u16() == 429 
+                || (status.is_client_error() && text.contains("automated queries"));
+            
+            if is_rate_limited {
+                if retry_count < Self::MAX_RETRIES {
+                    // Save HTML rate limit response for diagnostics
+                    let debug_dir = std::path::Path::new("debug");
+                    if !debug_dir.exists() {
+                        let _ = std::fs::create_dir("debug");
+                    }
+                    let timestamp = SystemTime::now()
+                        .duration_since(UNIX_EPOCH)
+                        .unwrap()
+                        .as_secs();
+                    let error_file = format!("debug/error_ratelimit_{}.html", timestamp);
+                    let _ = std::fs::write(&error_file, &text);
+                    
+                    // Calculate exponential backoff: 3^(retry_count + 1) seconds, capped at MAX_BACKOFF_SECS
+                    let backoff_secs = 3u64.pow(retry_count + 1).min(Self::MAX_BACKOFF_SECS);
+                    warn!(
+                        "Rate limit hit (attempt {}/{}). Response saved to {}. Waiting {} seconds before retry...",
+                        retry_count + 1,
+                        Self::MAX_RETRIES + 1,
+                        error_file,
+                        backoff_secs
+                    );
+                    tokio::time::sleep(Duration::from_secs(backoff_secs)).await;
+                    retry_count += 1;
+                    continue;
+                } else {
+                    return Err(eyre!(
+                        "Rate limit exceeded after {} attempts. Please wait before retrying manually.",
+                        Self::MAX_RETRIES + 1
+                    ));
+                }
             }
             
             if status.is_client_error() || status.is_server_error() {
@@ -787,9 +828,42 @@ impl YtMusicApi {
                 }
             }
             
-            // Check rate limiting
-            if status.as_u16() == 429 {
-                return Err(eyre!("Rate limit exceeded (429). Please wait before retrying."));
+            // Detect rate limiting: HTTP 429 or Google's HTML "automated queries" response
+            let is_rate_limited = status.as_u16() == 429
+                || (status.is_client_error() && text.contains("automated queries"));
+            
+            if is_rate_limited {
+                if retry_count < Self::MAX_RETRIES {
+                    // Save HTML rate limit response for diagnostics
+                    let debug_dir = std::path::Path::new("debug");
+                    if !debug_dir.exists() {
+                        let _ = std::fs::create_dir("debug");
+                    }
+                    let timestamp = SystemTime::now()
+                        .duration_since(UNIX_EPOCH)
+                        .unwrap()
+                        .as_secs();
+                    let error_file = format!("debug/error_ratelimit_{}.html", timestamp);
+                    let _ = std::fs::write(&error_file, &text);
+                    
+                    // Calculate exponential backoff: 3^(retry_count + 1) seconds, capped at MAX_BACKOFF_SECS
+                    let backoff_secs = 3u64.pow(retry_count + 1).min(Self::MAX_BACKOFF_SECS);
+                    warn!(
+                        "Rate limit hit (attempt {}/{}). Response saved to {}. Waiting {} seconds before retry...",
+                        retry_count + 1,
+                        Self::MAX_RETRIES + 1,
+                        error_file,
+                        backoff_secs
+                    );
+                    tokio::time::sleep(Duration::from_secs(backoff_secs)).await;
+                    retry_count += 1;
+                    continue;
+                } else {
+                    return Err(eyre!(
+                        "Rate limit exceeded after {} attempts. Please wait before retrying manually.",
+                        Self::MAX_RETRIES + 1
+                    ));
+                }
             }
             
             // NOW check for HTTP errors (403, etc.) and save diagnostic data
@@ -821,16 +895,17 @@ impl YtMusicApi {
             
             // Parse the JSON normally if no errors
             serde_json::from_str(&text)?
-        };
-        
-        // For browser auth, update cookies from response headers (after parsing JSON)
-        if matches!(self.auth_type, YtMusicAuthType::Browser { .. }) {
-            if let Err(e) = self.update_browser_cookies(&response_headers).await {
-                warn!("Failed to update browser cookies: {}", e);
+            };
+            
+            // For browser auth, update cookies from response headers (after parsing JSON)
+            if matches!(self.auth_type, YtMusicAuthType::Browser { .. }) {
+                if let Err(e) = self.update_browser_cookies(&response_headers).await {
+                    warn!("Failed to update browser cookies: {}", e);
+                }
             }
+            
+            return Ok(obj);
         }
-        
-        Ok(obj)
     }
 
     pub fn clean_playlist_id(id: &str) -> String {
@@ -1171,7 +1246,7 @@ impl MusicApi for YtMusicApi {
                                 let mid = songs.len() / 2;
                                 self.add_songs_to_playlist(playlist, &songs[..mid]).await?;
                                 // Add a delay before the next recursive call
-                                sleep(Duration::from_secs(3));
+                                tokio::time::sleep(Duration::from_secs(3)).await;
                                 self.add_songs_to_playlist(playlist, &songs[mid..]).await?;
                             } else {
                                 info!("Ignoring song already in playlist: {:?}", songs[0]);
