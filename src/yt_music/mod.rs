@@ -62,6 +62,16 @@ pub struct YtMusicApi {
     config: ConfigArgs,
 }
 
+/// Action to take after rate limit detection
+enum RateLimitAction {
+    /// Retry the request after the specified backoff duration
+    Retry(Duration),
+    /// Rate limit was not detected, continue with normal processing
+    Continue,
+    /// Maximum retries exceeded, abort the request
+    MaxRetriesExceeded,
+}
+
 impl YtMusicApi {
     const BASE_API: &'static str = "https://music.youtube.com/youtubei/v1/";
     const BASE_PARAMS: &'static str = "?alt=json&key=AIzaSyC9XL3ZjWddXya6X74dJoCTL-WEYFDNX30";
@@ -627,6 +637,122 @@ impl YtMusicApi {
         body
     }
 
+    /// Check for authentication errors in the response
+    fn check_authentication_errors(&self, text: &str) -> Result<()> {
+        // YouTube Music can return not-logged-in status in two formats:
+        // 1. Direct: "logged_in": "0" 
+        // 2. ServiceTrackingParams: {"key": "logged_in", "value": "0"}
+        let is_not_logged_in = 
+            // Check for direct format
+            text.contains(r#""logged_in":"0"#) || text.contains(r#""logged_in": "0"#)
+            // Check for key-value format in serviceTrackingParams
+            || ((text.contains(r#""key":"logged_in""#) || text.contains(r#""key": "logged_in""#)) 
+                && (text.contains(r#""value":"0""#) || text.contains(r#""value": "0""#)));
+        
+        if is_not_logged_in {
+            if matches!(self.auth_type, YtMusicAuthType::Browser { .. }) {
+                return Err(eyre!(
+                    "Authentication failed: Not logged in (logged_in=0).\n\
+                    Your browser authentication tokens have expired or are invalid.\n\
+                    This usually means your cookies or SAPISID have expired.\n\n\
+                    Please refresh your headers by running:\n  \
+                    cargo run --example setup_ytmusic_browser\n\n\
+                    Make sure you:\n\
+                    1. Are logged into YouTube Music in your browser\n\
+                    2. Copy headers from an authenticated request (like /browse)\n\
+                    3. Include ALL cookies, especially __Secure-3PAPISID"
+                ));
+            } else {
+                return Err(eyre!(
+                    "Authentication failed: Not logged in (logged_in=0).\n\
+                    OAuth authentication may have expired or been revoked."
+                ));
+            }
+        }
+        
+        // Check for sign-in prompts in response
+        if text.contains(r#""text":"Sign in""#) || 
+           (text.contains("signInEndpoint") && text.contains("messageRenderer")) {
+            if matches!(self.auth_type, YtMusicAuthType::Browser { .. }) {
+                return Err(eyre!(
+                    "YouTube Music is requesting sign-in.\n\
+                    Your browser cookies have expired or are invalid.\n\
+                    Please refresh your headers by running:\n  \
+                    cargo run --example setup_ytmusic_browser"
+                ));
+            } else {
+                return Err(eyre!(
+                    "YouTube Music is requesting sign-in.\n\
+                    OAuth authentication needs to be refreshed."
+                ));
+            }
+        }
+        
+        Ok(())
+    }
+
+    /// Handle rate limiting detection and retry logic
+    async fn handle_rate_limit_with_retry(
+        status: reqwest::StatusCode,
+        text: &str,
+        retry_count: u32,
+    ) -> Result<RateLimitAction> {
+        // Detect rate limiting: HTTP 429 or Google's HTML "automated queries" response
+        let is_rate_limited = status.as_u16() == 429 
+            || (status.is_client_error() && text.contains("automated queries"));
+        
+        if !is_rate_limited {
+            return Ok(RateLimitAction::Continue);
+        }
+        
+        if retry_count >= Self::MAX_RETRIES {
+            return Ok(RateLimitAction::MaxRetriesExceeded);
+        }
+        
+        // Save HTML rate limit response for diagnostics
+        let debug_dir = std::path::Path::new("debug");
+        if !debug_dir.exists() {
+            let _ = std::fs::create_dir("debug");
+        }
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        let error_file = format!("debug/error_ratelimit_{}.html", timestamp);
+        let _ = std::fs::write(&error_file, text);
+        
+        // Calculate exponential backoff: 3^(retry_count + 1) seconds, capped at MAX_BACKOFF_SECS
+        let backoff_secs = 3u64.pow(retry_count + 1).min(Self::MAX_BACKOFF_SECS);
+        warn!(
+            "Rate limit hit (attempt {}/{}). Response saved to {}. Waiting {} seconds before retry...",
+            retry_count + 1,
+            Self::MAX_RETRIES + 1,
+            error_file,
+            backoff_secs
+        );
+        
+        Ok(RateLimitAction::Retry(Duration::from_secs(backoff_secs)))
+    }
+
+    /// Save HTTP error diagnostic data and return the file path
+    fn save_http_error_diagnostic(status: reqwest::StatusCode, text: &str) -> Result<String> {
+        // Ensure debug directory exists
+        let debug_dir = std::path::Path::new("debug");
+        if !debug_dir.exists() {
+            let _ = std::fs::create_dir("debug");
+        }
+        
+        // Save diagnostic data with timestamp
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        let error_file = format!("debug/error_{}_{}.json", status.as_u16(), timestamp);
+        std::fs::write(&error_file, text)?;
+        
+        Ok(error_file)
+    }
+
     async fn paginated_request(
         &mut self,
         path: &str,
@@ -684,204 +810,39 @@ impl YtMusicApi {
             // For browser auth, capture and update cookies from response headers
             let response_headers = res.headers().clone();
             
-            let obj = if self.config.debug {
+            // Extract status and text
             let status = res.status();
             let text = res.text().await?;
-            std::fs::write(Self::RES_DEBUG_FILENAME, &text)?;
             
-            // Check for authentication/rate limiting issues
-            // YouTube Music can return not-logged-in status in two formats:
-            // 1. Direct: "logged_in": "0" 
-            // 2. ServiceTrackingParams: {"key": "logged_in", "value": "0"}
-            let is_not_logged_in = 
-                // Check for direct format
-                text.contains(r#""logged_in":"0"#) || text.contains(r#""logged_in": "0"#)
-                // Check for key-value format in serviceTrackingParams
-                || ((text.contains(r#""key":"logged_in""#) || text.contains(r#""key": "logged_in""#)) 
-                    && (text.contains(r#""value":"0""#) || text.contains(r#""value": "0""#)));
-            
-            if is_not_logged_in {
-                if matches!(self.auth_type, YtMusicAuthType::Browser { .. }) {
-                    return Err(eyre!(
-                        "Authentication failed: Not logged in (logged_in=0).\n\
-                        Your browser authentication tokens have expired or are invalid.\n\
-                        This usually means your cookies or SAPISID have expired.\n\n\
-                        Please refresh your headers by running:\n  \
-                        cargo run --example setup_ytmusic_browser\n\n\
-                        Make sure you:\n\
-                        1. Are logged into YouTube Music in your browser\n\
-                        2. Copy headers from an authenticated request (like /browse)\n\
-                        3. Include ALL cookies, especially __Secure-3PAPISID"
-                    ));
-                } else {
-                    return Err(eyre!(
-                        "Authentication failed: Not logged in (logged_in=0).\n\
-                        OAuth authentication may have expired or been revoked."
-                    ));
-                }
+            // Debug mode: save ALL responses
+            if self.config.debug {
+                std::fs::write(Self::RES_DEBUG_FILENAME, &text)?;
             }
             
-            // Check for sign-in prompts in response
-            if text.contains(r#""text":"Sign in""#) || 
-               (text.contains("signInEndpoint") && text.contains("messageRenderer")) {
-                if matches!(self.auth_type, YtMusicAuthType::Browser { .. }) {
-                    return Err(eyre!(
-                        "YouTube Music is requesting sign-in.\n\
-                        Your browser cookies have expired or are invalid.\n\
-                        Please refresh your headers by running:\n  \
-                        cargo run --example setup_ytmusic_browser"
-                    ));
-                } else {
-                    return Err(eyre!(
-                        "YouTube Music is requesting sign-in.\n\
-                        OAuth authentication needs to be refreshed."
-                    ));
-                }
-            }
+            // Check for authentication errors
+            self.check_authentication_errors(&text)?;
             
-            // Detect rate limiting: HTTP 429 or Google's HTML "automated queries" response
-            let is_rate_limited = status.as_u16() == 429 
-                || (status.is_client_error() && text.contains("automated queries"));
-            
-            if is_rate_limited {
-                if retry_count < Self::MAX_RETRIES {
-                    // Save HTML rate limit response for diagnostics
-                    let debug_dir = std::path::Path::new("debug");
-                    if !debug_dir.exists() {
-                        let _ = std::fs::create_dir("debug");
-                    }
-                    let timestamp = SystemTime::now()
-                        .duration_since(UNIX_EPOCH)
-                        .unwrap()
-                        .as_secs();
-                    let error_file = format!("debug/error_ratelimit_{}.html", timestamp);
-                    let _ = std::fs::write(&error_file, &text);
-                    
-                    // Calculate exponential backoff: 3^(retry_count + 1) seconds, capped at MAX_BACKOFF_SECS
-                    let backoff_secs = 3u64.pow(retry_count + 1).min(Self::MAX_BACKOFF_SECS);
-                    warn!(
-                        "Rate limit hit (attempt {}/{}). Response saved to {}. Waiting {} seconds before retry...",
-                        retry_count + 1,
-                        Self::MAX_RETRIES + 1,
-                        error_file,
-                        backoff_secs
-                    );
-                    tokio::time::sleep(Duration::from_secs(backoff_secs)).await;
+            // Handle rate limiting with retry
+            match Self::handle_rate_limit_with_retry(status, &text, retry_count).await? {
+                RateLimitAction::Retry(backoff_duration) => {
+                    tokio::time::sleep(backoff_duration).await;
                     retry_count += 1;
                     continue;
-                } else {
+                }
+                RateLimitAction::MaxRetriesExceeded => {
                     return Err(eyre!(
                         "Rate limit exceeded after {} attempts. Please wait before retrying manually.",
                         Self::MAX_RETRIES + 1
                     ));
                 }
+                RateLimitAction::Continue => {
+                    // Not rate limited, continue with normal processing
+                }
             }
             
+            // Check for HTTP errors and save diagnostic data
             if status.is_client_error() || status.is_server_error() {
-                return Err(eyre!("HTTP Error {}: {}", status, text));
-            }
-            serde_json::from_str(&text)?
-        } else {
-            // Production mode: capture status and body BEFORE any error checking
-            let status = res.status();
-            let text = res.text().await?;
-            
-            // Check for authentication/rate limiting issues FIRST (before status check)
-            let is_not_logged_in = 
-                // Check for direct format
-                text.contains(r#""logged_in":"0"#) || text.contains(r#""logged_in": "0"#)
-                // Check for key-value format in serviceTrackingParams
-                || ((text.contains(r#""key":"logged_in""#) || text.contains(r#""key": "logged_in""#)) 
-                    && (text.contains(r#""value":"0""#) || text.contains(r#""value": "0""#)));
-            
-            if is_not_logged_in {
-                if matches!(self.auth_type, YtMusicAuthType::Browser { .. }) {
-                    return Err(eyre!(
-                        "Authentication failed: Not logged in.\n\
-                        Your browser authentication has expired.\n\
-                        Please refresh your headers by running:\n  \
-                        cargo run --example setup_ytmusic_browser"
-                    ));
-                } else {
-                    return Err(eyre!(
-                        "Authentication failed: Not logged in.\n\
-                        OAuth authentication may have expired."
-                    ));
-                }
-            }
-            
-            // Check for sign-in prompts
-            if text.contains(r#""text":"Sign in""#) || 
-               (text.contains("signInEndpoint") && text.contains("messageRenderer")) {
-                if matches!(self.auth_type, YtMusicAuthType::Browser { .. }) {
-                    return Err(eyre!(
-                        "YouTube Music is requesting sign-in.\n\
-                        Your browser cookies have expired or are invalid.\n\
-                        Please refresh your headers by running:\n  \
-                        cargo run --example setup_ytmusic_browser"
-                    ));
-                } else {
-                    return Err(eyre!(
-                        "YouTube Music is requesting sign-in.\n\
-                        OAuth authentication needs to be refreshed."
-                    ));
-                }
-            }
-            
-            // Detect rate limiting: HTTP 429 or Google's HTML "automated queries" response
-            let is_rate_limited = status.as_u16() == 429
-                || (status.is_client_error() && text.contains("automated queries"));
-            
-            if is_rate_limited {
-                if retry_count < Self::MAX_RETRIES {
-                    // Save HTML rate limit response for diagnostics
-                    let debug_dir = std::path::Path::new("debug");
-                    if !debug_dir.exists() {
-                        let _ = std::fs::create_dir("debug");
-                    }
-                    let timestamp = SystemTime::now()
-                        .duration_since(UNIX_EPOCH)
-                        .unwrap()
-                        .as_secs();
-                    let error_file = format!("debug/error_ratelimit_{}.html", timestamp);
-                    let _ = std::fs::write(&error_file, &text);
-                    
-                    // Calculate exponential backoff: 3^(retry_count + 1) seconds, capped at MAX_BACKOFF_SECS
-                    let backoff_secs = 3u64.pow(retry_count + 1).min(Self::MAX_BACKOFF_SECS);
-                    warn!(
-                        "Rate limit hit (attempt {}/{}). Response saved to {}. Waiting {} seconds before retry...",
-                        retry_count + 1,
-                        Self::MAX_RETRIES + 1,
-                        error_file,
-                        backoff_secs
-                    );
-                    tokio::time::sleep(Duration::from_secs(backoff_secs)).await;
-                    retry_count += 1;
-                    continue;
-                } else {
-                    return Err(eyre!(
-                        "Rate limit exceeded after {} attempts. Please wait before retrying manually.",
-                        Self::MAX_RETRIES + 1
-                    ));
-                }
-            }
-            
-            // NOW check for HTTP errors (403, etc.) and save diagnostic data
-            if status.is_client_error() || status.is_server_error() {
-                // Ensure debug directory exists
-                let debug_dir = std::path::Path::new("debug");
-                if !debug_dir.exists() {
-                    let _ = std::fs::create_dir("debug");
-                }
-                
-                // Save diagnostic data with timestamp
-                let timestamp = SystemTime::now()
-                    .duration_since(UNIX_EPOCH)
-                    .unwrap()
-                    .as_secs();
-                let error_file = format!("debug/error_{}_{}.json", status.as_u16(), timestamp);
-                let _ = std::fs::write(&error_file, &text);
-                
+                let error_file = Self::save_http_error_diagnostic(status, &text)?;
                 warn!("HTTP Error {} - Response saved to: {}", status, error_file);
                 return Err(eyre!(
                     "HTTP Error {}: {}\n\
@@ -893,9 +854,8 @@ impl YtMusicApi {
                 ));
             }
             
-            // Parse the JSON normally if no errors
-            serde_json::from_str(&text)?
-            };
+            // Parse the JSON response
+            let obj: T = serde_json::from_str(&text)?;
             
             // For browser auth, update cookies from response headers (after parsing JSON)
             if matches!(self.auth_type, YtMusicAuthType::Browser { .. }) {
