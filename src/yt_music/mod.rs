@@ -709,32 +709,19 @@ impl YtMusicApi {
             return Ok(RateLimitAction::MaxRetriesExceeded);
         }
         
-        // Save HTML rate limit response for diagnostics
-        let debug_dir = std::path::Path::new("debug");
-        if !debug_dir.exists() {
-            let _ = std::fs::create_dir("debug");
-        }
-        let timestamp = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
-        let error_file = format!("debug/error_ratelimit_{}.html", timestamp);
-        let _ = std::fs::write(&error_file, text);
-        
         // Calculate exponential backoff: 3^(retry_count + 1) seconds, capped at MAX_BACKOFF_SECS
         let backoff_secs = 3u64.pow(retry_count + 1).min(Self::MAX_BACKOFF_SECS);
         warn!(
-            "Rate limit hit (attempt {}/{}). Response saved to {}. Waiting {} seconds before retry...",
+            "Rate limit hit (attempt {}/{}). Waiting {} seconds before retry...",
             retry_count + 1,
             Self::MAX_RETRIES + 1,
-            error_file,
             backoff_secs
         );
         
         Ok(RateLimitAction::Retry(Duration::from_secs(backoff_secs)))
     }
 
-    /// Save HTTP error diagnostic data and return the file path
+    /// Save HTTP error diagnostic data with auto-detected file type and return the file path
     fn save_http_error_diagnostic(status: reqwest::StatusCode, text: &str) -> Result<String> {
         // Ensure debug directory exists
         let debug_dir = std::path::Path::new("debug");
@@ -742,12 +729,21 @@ impl YtMusicApi {
             let _ = std::fs::create_dir("debug");
         }
         
-        // Save diagnostic data with timestamp
+        // Detect file type based on content
+        let extension = if text.trim_start().to_lowercase().starts_with("<html") {
+            "html"
+        } else if serde_json::from_str::<serde_json::Value>(text).is_ok() {
+            "json"
+        } else {
+            "txt"
+        };
+        
+        // Save diagnostic data with timestamp and detected extension
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_secs();
-        let error_file = format!("debug/error_{}_{}.json", status.as_u16(), timestamp);
+        let error_file = format!("debug/error_{}_{}.{}", status.as_u16(), timestamp, extension);
         std::fs::write(&error_file, text)?;
         
         Ok(error_file)
@@ -830,9 +826,12 @@ impl YtMusicApi {
                     continue;
                 }
                 RateLimitAction::MaxRetriesExceeded => {
+                    let error_file = Self::save_http_error_diagnostic(status, &text)?;
                     return Err(eyre!(
-                        "Rate limit exceeded after {} attempts. Please wait before retrying manually.",
-                        Self::MAX_RETRIES + 1
+                        "Rate limit exceeded after {} attempts. Please wait before retrying manually.\n\
+                        Response saved to: {}",
+                        Self::MAX_RETRIES + 1,
+                        error_file
                     ));
                 }
                 RateLimitAction::Continue => {
