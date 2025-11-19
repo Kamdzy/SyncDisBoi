@@ -85,7 +85,7 @@ impl YtMusicApi {
     
     // Retry configuration for rate limiting
     const MAX_RETRIES: u32 = 5;  // 6 total attempts (0-5)
-    const MAX_BACKOFF_SECS: u64 = 900;  // Cap exponential backoff at 120 seconds
+    const MAX_BACKOFF_SECS: u64 = 900;  // Cap exponential backoff at 900 seconds (15 minutes)
 
     /// Create a new YtMusicApi instance using browser authentication
     pub async fn new_browser(headers_path: PathBuf, config: ConfigArgs) -> Result<Self> {
@@ -709,8 +709,9 @@ impl YtMusicApi {
             return Ok(RateLimitAction::MaxRetriesExceeded);
         }
         
-        // Calculate exponential backoff: 3^(retry_count + 1) seconds, capped at MAX_BACKOFF_SECS
-        let backoff_secs = 3u64.pow(retry_count + 1).min(Self::MAX_BACKOFF_SECS);
+        // Calculate exponential backoff: 60 * 2^retry_count seconds, capped at MAX_BACKOFF_SECS
+        // Sequence: 60s, 120s, 240s, 480s, 900s, 900s
+        let backoff_secs = (60u64 * 2u64.pow(retry_count)).min(Self::MAX_BACKOFF_SECS);
         warn!(
             "Rate limit hit (attempt {}/{}). Waiting {} seconds before retry...",
             retry_count + 1,
