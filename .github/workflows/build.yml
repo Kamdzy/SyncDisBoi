@@ -14,47 +14,113 @@ name: CI
       - main
     tags:
       - v*
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      build-linux-aarch64:
+        description: "Build Linux ARM64"
+        required: false
+        default: false
+        type: boolean
+      build-windows:
+        description: "Build Windows x86_64"
+        required: false
+        default: false
+        type: boolean
+      build-macos:
+        description: "Build macOS ARM64"
+        required: false
+        default: false
+        type: boolean
 jobs:
-  build:
-    name: Build
-    runs-on: ${{matrix.os}}
+  build-linux-x86_64:
+    name: Build Linux x86_64
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Install Nix
         uses: DeterminateSystems/nix-installer-action@v21
       - name: Magic Nix Cache
         uses: DeterminateSystems/magic-nix-cache-action@v13
-      - name: Build ${{ matrix.target }} binary
+      - name: Build binary
         run: |
-          nix build -L .#${{matrix.target.derivation}}
+          nix build -L .#x86_64-unknown-linux-musl
           mkdir artifacts/
           cp result/bin/* artifacts
           cd artifacts
-          ls | xargs -I{} mv {} ${{matrix.target.name}}-{}
+          ls | xargs -I{} mv {} linux-x86_64-{}
       - uses: actions/upload-artifact@v4
         with:
-          name: "${{ matrix.target.name }}-sync_dis_boi"
+          name: "linux-x86_64-sync_dis_boi"
           path: "artifacts/*"
-    strategy:
-      matrix:
-        os:
-          - ubuntu-latest
-        target:
-          - derivation: x86_64-unknown-linux-musl
-            name: linux-x86_64
-          - derivation: aarch64-unknown-linux-musl
-            name: linux-aarch64
-          - derivation: x86_64-pc-windows-gnu
-            name: windows-x86_64
-        include:
-          - os: macos-latest
-            target:
-              derivation: ""
-              name: mac-aarch64
+
+  build-linux-aarch64:
+    name: Build Linux ARM64
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && inputs.build-linux-aarch64
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@v21
+      - name: Magic Nix Cache
+        uses: DeterminateSystems/magic-nix-cache-action@v13
+      - name: Build binary
+        run: |
+          nix build -L .#aarch64-unknown-linux-musl
+          mkdir artifacts/
+          cp result/bin/* artifacts
+          cd artifacts
+          ls | xargs -I{} mv {} linux-aarch64-{}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: "linux-aarch64-sync_dis_boi"
+          path: "artifacts/*"
+
+  build-windows:
+    name: Build Windows x86_64
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && inputs.build-windows
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@v21
+      - name: Magic Nix Cache
+        uses: DeterminateSystems/magic-nix-cache-action@v13
+      - name: Build binary
+        run: |
+          nix build -L .#x86_64-pc-windows-gnu
+          mkdir artifacts/
+          cp result/bin/* artifacts
+          cd artifacts
+          ls | xargs -I{} mv {} windows-x86_64-{}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: "windows-x86_64-sync_dis_boi"
+          path: "artifacts/*"
+
+  build-macos:
+    name: Build macOS ARM64
+    runs-on: macos-latest
+    if: github.event_name == 'workflow_dispatch' && inputs.build-macos
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@v21
+      - name: Magic Nix Cache
+        uses: DeterminateSystems/magic-nix-cache-action@v13
+      - name: Build binary
+        run: |
+          nix build -L .#
+          mkdir artifacts/
+          cp result/bin/* artifacts
+          cd artifacts
+          ls | xargs -I{} mv {} mac-aarch64-{}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: "mac-aarch64-sync_dis_boi"
+          path: "artifacts/*"
   dockerize:
     name: Dockerize and Push
-    needs: build
+    needs: build-linux-x86_64
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -85,7 +151,7 @@ jobs:
           tags: ghcr.io/kamdzy/sync_dis_boi:latest
   release:
     name: Release
-    needs: build
+    needs: [build-linux-x86_64, build-linux-aarch64, build-windows, build-macos]
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && contains(github.ref, 'refs/tags/')
     steps:
