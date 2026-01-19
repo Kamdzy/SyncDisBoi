@@ -172,6 +172,11 @@ pub async fn synchronize_playlists(
                 }
                 to_sync.push(dst_song.clone());
             }
+            debug!(
+                "adding {} songs to destination playlist \"{}\"",
+                to_sync.len(),
+                dst_playlist.name
+            );
             dst_api
                 .add_songs_to_playlist(&mut dst_playlist, &to_sync)
                 .await?;
