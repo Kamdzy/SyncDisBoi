@@ -43,8 +43,7 @@ enum HttpMethod<'a> {
 
 impl SpotifyApi {
     const BASE_API: &'static str = "https://api.spotify.com/v1";
-    const REDIRECT_URI_HOST: &'static str = "127.0.0.1:8888";
-    const REDIRECT_URI_URL: &'static str = "http://127.0.0.1:8888/callback";
+    pub const REDIRECT_URI_URL: &'static str = "http://127.0.0.1:8888/callback";
     const TOKEN_URL: &'static str = "https://accounts.spotify.com/api/token";
     const SCOPES: &'static [&'static str] = &[
         "user-read-email",
@@ -63,11 +62,12 @@ impl SpotifyApi {
         client_id: &str,
         client_secret: &str,
         oauth_token_path: PathBuf,
+        redirect_uri: &str,
         clear_cache: bool,
         config: ConfigArgs,
     ) -> Result<Self> {
         let token = if !oauth_token_path.exists() || clear_cache {
-            Self::request_token(&config, client_id, client_secret).await?
+            Self::request_token(&config, client_id, client_secret, redirect_uri).await?
         } else {
             info!("refreshing token");
             Self::refresh_token(&config, client_id, client_secret, &oauth_token_path).await?
@@ -111,14 +111,25 @@ impl SpotifyApi {
         config: &ConfigArgs,
         client_id: &str,
         client_secret: &str,
+        redirect_uri: &str,
     ) -> Result<OAuthToken> {
-        let auth_url = SpotifyApi::build_authorization_url(client_id)?;
-        let auth_code = SpotifyApi::listen_for_code(&auth_url).await?;
+        let auth_url = SpotifyApi::build_authorization_url(client_id, redirect_uri)?;
+
+        let redirect_uri_url = reqwest::Url::parse(redirect_uri)?;
+        let host_str = redirect_uri_url
+            .host_str()
+            .ok_or(eyre!("Invalid redirect URI"))?;
+        let host_port = redirect_uri_url
+            .port()
+            .ok_or(eyre!("Invalid redirect URI"))?;
+        let uri_host_port = format!("{}:{}", host_str, host_port);
+
+        let auth_code = SpotifyApi::listen_for_code(&auth_url, &uri_host_port).await?;
 
         let mut params = HashMap::new();
         params.insert("grant_type", "authorization_code");
         params.insert("code", &auth_code);
-        params.insert("redirect_uri", Self::REDIRECT_URI_URL);
+        params.insert("redirect_uri", redirect_uri);
 
         let client = reqwest::Client::new();
         let res = client
@@ -166,13 +177,13 @@ impl SpotifyApi {
         Ok(oauth_token)
     }
 
-    fn build_authorization_url(client_id: &str) -> Result<String> {
+    fn build_authorization_url(client_id: &str, redirect_uri: &str) -> Result<String> {
         let mut params = HashMap::new();
         params.insert("response_type", "code");
         let scopes = SpotifyApi::SCOPES.iter().as_slice().join(" ");
         params.insert("scope", &scopes);
         params.insert("client_id", client_id);
-        params.insert("redirect_uri", SpotifyApi::REDIRECT_URI_URL);
+        params.insert("redirect_uri", redirect_uri);
 
         Ok(
             reqwest::Url::parse_with_params("https://accounts.spotify.com/authorize", params)?
@@ -180,11 +191,11 @@ impl SpotifyApi {
         )
     }
 
-    async fn listen_for_code(auth_url: &str) -> Result<String> {
-        let listener = TcpListener::bind(SpotifyApi::REDIRECT_URI_HOST).await?;
+    async fn listen_for_code(auth_url: &str, host_port: &str) -> Result<String> {
+        let listener = TcpListener::bind(host_port).await?;
         webbrowser::open(auth_url)?;
 
-        info!("please authorize the app in your browser and press enter in the CLI");
+        info!("please authorize the app in your browser");
         let (socket, _) = listener.accept().await?;
 
         socket.readable().await?;

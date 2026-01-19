@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use clap::{Parser, Subcommand, ValueEnum};
-use sync_dis_boi::ConfigArgs;
+use sync_dis_boi::{ConfigArgs, spotify::SpotifyApi};
 use tracing::Level;
 
 #[derive(Parser, Debug)]
@@ -58,6 +58,9 @@ pub enum MusicPlatformSrc {
         /// Clear the cached `spotify_oauth.json` file
         #[arg(long)]
         clear_cache: bool,
+        /// The redirect URI for the Spotify API application
+        #[arg(long, default_value = SpotifyApi::REDIRECT_URI_URL)]
+        redirect_uri: String,
         /// The destination music platform
         #[command(subcommand)]
         dst: MusicPlatformDst,
@@ -112,6 +115,9 @@ pub enum MusicPlatformDst {
         /// Clear the cached `spotify_oauth.json` file
         #[arg(long)]
         clear_cache: bool,
+        /// The redirect URI for the Spotify API application
+        #[arg(long, default_value = SpotifyApi::REDIRECT_URI_URL)]
+        redirect_uri: String,
     },
     Tidal {
         /// The client ID for the Tidal API application
