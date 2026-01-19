@@ -164,7 +164,7 @@ impl YtMusicApi {
             oauth_res.verification_url, oauth_res.user_code
         );
         webbrowser::open(&auth_url)?;
-        info!("please authorize the app in your browser and press enter");
+        info!("please authorize the app in your browser and press enter in the CLI");
         std::io::stdin().read_exact(&mut [0])?;
 
         // 2. request the token

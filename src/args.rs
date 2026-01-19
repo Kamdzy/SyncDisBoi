@@ -55,7 +55,7 @@ pub enum MusicPlatformSrc {
         /// The client secret for the Spotify API application
         #[arg(long, env = "SPOTIFY_CLIENT_SECRET")]
         client_secret: String,
-        /// Clear the cached spotify_oauth.json file
+        /// Clear the cached `spotify_oauth.json` file
         #[arg(long)]
         clear_cache: bool,
         /// The destination music platform
@@ -69,7 +69,7 @@ pub enum MusicPlatformSrc {
         /// The client secret for the Tidal API application
         #[arg(long, env = "TIDAL_CLIENT_SECRET", default_value = TIDAL_DEFAULT_CLIENT_SECRET)]
         client_secret: String,
-        /// Clear the cached tidal_oauth.json file
+        /// Clear the cached `tidal_oauth.json` file
         #[arg(long)]
         clear_cache: bool,
         /// The destination music platform
@@ -109,7 +109,7 @@ pub enum MusicPlatformDst {
         /// The client secret for the Spotify API application
         #[arg(long, env = "SPOTIFY_CLIENT_SECRET")]
         client_secret: String,
-        /// Clear the cached spotify_oauth.json file
+        /// Clear the cached `spotify_oauth.json` file
         #[arg(long)]
         clear_cache: bool,
     },
@@ -120,7 +120,7 @@ pub enum MusicPlatformDst {
         #[arg(long, env = "TIDAL_CLIENT_SECRET", default_value = TIDAL_DEFAULT_CLIENT_SECRET)]
         /// The client secret for the Tidal API application
         client_secret: String,
-        /// Clear the cached tidal_oauth.json file
+        /// Clear the cached `tidal_oauth.json` file
         #[arg(long)]
         clear_cache: bool,
     },

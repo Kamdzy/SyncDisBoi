@@ -184,7 +184,7 @@ impl SpotifyApi {
         let listener = TcpListener::bind(SpotifyApi::REDIRECT_URI_HOST).await?;
         webbrowser::open(auth_url)?;
 
-        info!("Please authorize the app in your browser");
+        info!("please authorize the app in your browser and press enter in the CLI");
         let (socket, _) = listener.accept().await?;
 
         socket.readable().await?;
