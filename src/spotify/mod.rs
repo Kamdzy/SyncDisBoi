@@ -48,6 +48,7 @@ impl SpotifyApi {
     const BASE_API: &'static str = "https://api.spotify.com/v1";
     // const REDIRECT_URI_HOST: &'static str = "127.0.0.1:8888";
     // const REDIRECT_URI_URL: &'static str = "http://127.0.0.1:8888/callback";
+    pub const REDIRECT_URI_URL: &'static str = "http://127.0.0.1:8888/callback";
     const TOKEN_URL: &'static str = "https://accounts.spotify.com/api/token";
     const SCOPES: &'static [&'static str] = &[
         "user-read-email",
@@ -66,13 +67,14 @@ impl SpotifyApi {
         client_id: &str,
         client_secret: &str,
         oauth_token_path: PathBuf,
+        redirect_uri: &str,
         clear_cache: bool,
         callback_host: &str,
         callback_port: &str,
         config: ConfigArgs,
     ) -> Result<Self> {
         let token = if !oauth_token_path.exists() || clear_cache {
-            Self::request_token(&config, client_id, client_secret, callback_host, callback_port).await?
+            Self::request_token(&config, client_id, client_secret, callback_host, callback_port, redirect_uri).await?
         } else {
             info!("refreshing token");
             Self::refresh_token(&config, client_id, client_secret, &oauth_token_path).await?
@@ -120,9 +122,10 @@ impl SpotifyApi {
         client_id: &str,
         client_secret: &str,
         callback_host: &str,
-        callback_port: &str
+        callback_port: &str,
+        redirect_uri: &str,
     ) -> Result<OAuthToken> {
-        let auth_url = SpotifyApi::build_authorization_url(client_id, callback_host, callback_port)?;
+        let auth_url = SpotifyApi::build_authorization_url(client_id, callback_host, callback_port, redirect_uri)?;
         let auth_code = SpotifyApi::listen_for_code(&auth_url, callback_port).await?;
         let final_callback_host = if callback_host == "0.0.0.0" {
             "localhost"
@@ -181,7 +184,7 @@ impl SpotifyApi {
         Ok(oauth_token)
     }
 
-    fn build_authorization_url(client_id: &str, callback_host: &str, callback_port: &str) -> Result<String> {
+    fn build_authorization_url(client_id: &str, callback_host: &str, callback_port: &str, redirect_uri: &str) -> Result<String> {
         let final_callback_host = if callback_host == "0.0.0.0" {
             "localhost"
         } else {
@@ -194,7 +197,7 @@ impl SpotifyApi {
         params.insert("scope", &scopes);
         params.insert("client_id", client_id);
         params.insert("redirect_uri", &redirect_uri_url);
-
+        let _ = redirect_uri;
         Ok(
             reqwest::Url::parse_with_params("https://accounts.spotify.com/authorize", params)?
                 .to_string(),

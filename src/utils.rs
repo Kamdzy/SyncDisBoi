@@ -97,16 +97,25 @@ where
     const DEBUG_FOLDER: &str = "debug";
 
     let res = if config.debug {
-        let text = res.text().await?;
+        let full = res.bytes().await?;
         std::fs::write(
             format!("{}/{}_last_res.json", DEBUG_FOLDER, platform),
-            &text,
+            &full,
         )?;
-        serde_json::from_str(&text).inspect_err(|_| {
-            let _ = std::fs::write(format!("debug/{}_last_error.json", platform), &text);
-        })?
+        if full.is_empty() {
+            serde_json::from_str("null")?
+        } else {
+            serde_json::from_slice(&full).inspect_err(|_| {
+                let _ = std::fs::write(format!("debug/{}_last_error.json", platform), &full);
+            })?
+        }
     } else {
-        res.json().await?
+        let full = res.bytes().await?;
+        if full.is_empty() {
+            serde_json::from_str("null")?
+        } else {
+            serde_json::from_slice(&full)?
+        }
     };
     Ok(res)
 }

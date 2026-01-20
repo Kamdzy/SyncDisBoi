@@ -77,6 +77,7 @@ macro_rules! impl_build_api {
                         clear_cache,
                         callback_host,
                         callback_port,
+                        redirect_uri,
                         ..
                     } => {
                         let oauth_token_path = config_dir.join("spotify_oauth.json");
@@ -85,6 +86,7 @@ macro_rules! impl_build_api {
                                 &client_id,
                                 &client_secret,
                                 oauth_token_path,
+                                &redirect_uri,
                                 *clear_cache,
                                 &callback_host,
                                 &callback_port,

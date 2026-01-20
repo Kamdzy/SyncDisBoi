@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use clap::{Parser, Subcommand, ValueEnum};
-use sync_dis_boi::ConfigArgs;
+use sync_dis_boi::{ConfigArgs, spotify::SpotifyApi};
 use tracing::Level;
 
 #[derive(Parser, Debug)]
@@ -63,7 +63,7 @@ pub enum MusicPlatformSrc {
         /// The client secret for the Spotify API application
         #[arg(long, env = "SPOTIFY_CLIENT_SECRET")]
         client_secret: String,
-        /// Clear the cached spotify_oauth.json file
+        /// Clear the cached `spotify_oauth.json` file
         #[arg(long)]
         clear_cache: bool,
         /// The owner of the playlists, this is required to know which playlists to skip
@@ -76,6 +76,9 @@ pub enum MusicPlatformSrc {
         /// Callback port for the Spotify API
         #[arg(long, env = "SPOTIFY_CALLBACK_PORT", default_value = "8888")]
         callback_port: String,
+        /// The redirect URI for the Spotify API application
+        #[arg(long, default_value = SpotifyApi::REDIRECT_URI_URL)]
+        redirect_uri: String,
         /// The destination music platform
         #[command(subcommand)]
         dst: MusicPlatformDst,
@@ -87,7 +90,7 @@ pub enum MusicPlatformSrc {
         /// The client secret for the Tidal API application
         #[arg(long, env = "TIDAL_CLIENT_SECRET", default_value = TIDAL_DEFAULT_CLIENT_SECRET)]
         client_secret: String,
-        /// Clear the cached tidal_oauth.json file
+        /// Clear the cached `tidal_oauth.json` file
         #[arg(long)]
         clear_cache: bool,
         /// The owner of the playlists, this is required to know which playlists to skip
@@ -164,7 +167,7 @@ pub enum MusicPlatformDst {
         /// The client secret for the Spotify API application
         #[arg(long, env = "SPOTIFY_CLIENT_SECRET")]
         client_secret: String,
-        /// Clear the cached spotify_oauth.json file
+        /// Clear the cached `spotify_oauth.json` file
         #[arg(long)]
         clear_cache: bool,
         /// The owner of the playlists, this is required to know which playlists to skip
@@ -176,7 +179,10 @@ pub enum MusicPlatformDst {
         callback_host: String,
         /// Callback port for the Spotify API
         #[arg(long, env = "SPOTIFY_CALLBACK_PORT", default_value = "8888")]
-        callback_port: String
+        callback_port: String,
+        /// The redirect URI for the Spotify API application
+        #[arg(long, default_value = SpotifyApi::REDIRECT_URI_URL)]
+        redirect_uri: String,
     },
     Tidal {
         /// The client ID for the Tidal API application
@@ -185,7 +191,7 @@ pub enum MusicPlatformDst {
         #[arg(long, env = "TIDAL_CLIENT_SECRET", default_value = TIDAL_DEFAULT_CLIENT_SECRET)]
         /// The client secret for the Tidal API application
         client_secret: String,
-        /// Clear the cached tidal_oauth.json file
+        /// Clear the cached `tidal_oauth.json` file
         #[arg(long)]
         clear_cache: bool,
         /// The owner of the playlists, this is required to know which playlists to skip
