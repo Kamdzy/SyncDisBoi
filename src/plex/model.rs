@@ -4,14 +4,14 @@ use serde::Deserialize;
 #[serde(rename = "MyPlex")]
 #[allow(dead_code)]
 pub struct PlexUserResponse {
-    #[serde(rename = "authToken")]
-    pub auth_token: String,
+    #[serde(rename = "authToken", default)]
+    pub auth_token: Option<String>,
 
     #[serde(rename = "username")]
     pub username: String,
 
-    #[serde(rename = "mappingState")]
-    pub mapping_state: String
+    #[serde(rename = "mappingState", default)]
+    pub mapping_state: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
