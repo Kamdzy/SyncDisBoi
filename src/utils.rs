@@ -114,7 +114,10 @@ where
         if full.is_empty() {
             serde_json::from_str("null")?
         } else {
-            serde_json::from_slice(&full)?
+            serde_json::from_slice(&full).map_err(|e| {
+                let snippet = String::from_utf8_lossy(full.get(..500).unwrap_or(&full));
+                color_eyre::eyre::eyre!("JSON parse error: {}. Response body: {}", e, snippet)
+            })?
         }
     };
     Ok(res)
